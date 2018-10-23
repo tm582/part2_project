@@ -1,0 +1,13 @@
+SampleName	fileName	condition
+3LT4_dnmt3l	tophat.C34M8ACXX_j3LT4_15s008602-1-1_Vasiliauskaite_lane115s008602.2238.counts	dnmt3l
+3LT5_dnmt3l	tophat.C34M8ACXX_j3LT5_15s008603-1-1_Vasiliauskaite_lane115s008603.2238.counts	dnmt3l
+3LT6_dnmt3l	tophat.C34M8ACXX_j3LT6_15s008604-1-1_Vasiliauskaite_lane115s008604.2238.counts	dnmt3l
+MT4_mili	tophat.C34M8ACXX_jMT4_15s008599-1-1_Vasiliauskaite_lane115s008599.2238.counts	mili
+MT5_mili	tophat.C34M8ACXX_jMT5_15s008600-1-1_Vasiliauskaite_lane115s008600.2238.counts	mili
+MT6_mili	tophat.C34M8ACXX_jMT6_15s008601-1-1_Vasiliauskaite_lane115s008601.2238.counts	mili
+T1_control	tophat.C34M8ACXX_jT1_15s008593-1-1_Vasiliauskaite_lane115s008593.2238.counts	control
+T2_control	tophat.C34M8ACXX_jT2_15s008594-1-1_Vasiliauskaite_lane115s008594.2238.counts	control
+T3_control	tophat.C34M8ACXX_jT3_15s008595-1-1_Vasiliauskaite_lane115s008595.2238.counts	control
+T4_miwi2	tophat.C34M8ACXX_jT4_15s008596-1-1_Vasiliauskaite_lane115s008596.2238.counts	miwi2
+T5_miwi2	tophat.C34M8ACXX_jT5_15s008597-1-1_Vasiliauskaite_lane115s008597.2238.counts	miwi2
+T6_miwi2	tophat.C34M8ACXX_jT6_15s008598-1-1_Vasiliauskaite_lane115s008598.2238.counts	miwi2
