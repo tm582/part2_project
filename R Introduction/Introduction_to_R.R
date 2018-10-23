@@ -29,28 +29,43 @@ hmcol = colorRampPalette(brewer.pal(9, "GnBu"))(100)
 #insert table of counts
 mircounts<-read.table('mircounts.txt', header=TRUE,row.names = 1)
 #load sample data (pdata)
-pdata<-read.table('pdata.txt',header=TRUE,row.names = 1,sep='\t')
+pdata<-read.table('pdata.txt',header=TRUE,row.names = 1)
 
+# Take the rownames from our experimental description (pdata) and make colnames for the count table
 colnames(mircounts)=rownames(pdata)
 groups=as.factor(pdata$group)
-conds=as.factor(pdata$treatment)
+
+# Make a conditions object for DESeq
+conds=pdata$treatment
 
 ##Count Loading and normalisation
 #creating DESeq object from count table looking at one condiiton (treatment)
-coldata=as.data.frame(t(t(conds)))
+coldata=as.data.frame(conds)
+
+# Add sample names to column data object for DESeq
 rownames(coldata)=colnames(mircounts)
-colnames(coldata)='treatment'
-dds<-DESeqDataSetFromMatrix(countdata=mircounts,coldata=coldata,design=~treatment)
+coldata$group = groups
+
+# Load a DESeq count object using our counts, description and give it a experimental design.
+# Simple - > Only consider the 'condition' wt or miR210
+dds<-DESeqDataSetFromMatrix(mircounts,coldata,design=~conds)
+
+# Complicated -> Also consider the group who prepared the sample.
+dds<-DESeqDataSetFromMatrix(mircounts,coldata,design=~conds+group)
 
 #pre data normalisation
+
+# Build unique colour scheme for each condition
 cond_colours = brewer.pal(length(unique(conds)),"Accent")[as.factor(conds)]
 names(cond_colours)=conds
 
-group_colours = brewer.pal(3,"Accent")[as.factor(pdata$group)]
+# Build unique colour scheme for each group
+group_colours = brewer.pal(3,"Dark2")[as.factor(pdata$group)]
 names(group_colours)=pdata$group
 
-barplot(apply(mircounts,2,sum), las=2,col=cond_colours,main="Pre Normalised Counts")
-legend("topright",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
+# Plot Before we Normalise
+barplot(apply(counts(dds),2,sum), las=2,col=cond_colours,main="Pre Normalised Counts",cex.names=0.5)
+legend("topleft",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
 
 #estimating dispersion of the data
 dds <- estimateSizeFactors(dds)
@@ -58,15 +73,25 @@ dds <- estimateDispersions(dds)
 
 plotDispEsts(dds)
 
+# Plot the results after
+barplot(apply(counts(dds,normalized=T),2,sum), las=2,col=cond_colours,main="Normalised Counts")
+legend("topright",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
+
+# Try to do both plots together to compare
+par(mfrow=c(2,1)) # Set up two plots
+barplot(apply(counts(dds),2,sum), las=2,col=cond_colours,main="Pre Normalised Counts",cex.names=0.5)
+legend("topleft",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
+barplot(apply(counts(dds,normalized=T),2,sum), las=2,col=cond_colours,main="Normalised Counts")
+legend("topright",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
+par(mfrow=c(1,1))
+
+
 #Post Normalisation
 normcounts <- counts(dds, normalized=TRUE)
-rawcounts=counts(dds,normalized=FALSE)
-log2counts=log2(normcounts+1)
+rawcounts  = counts(dds,normalized=FALSE)
+log2counts = log2(normcounts+1)
 
 
-barplot(apply(normcounts,2,sum), las=2,col=cond_colours,main="Normalised Counts")
-
-legend("topright",levels((conds)),cex=0.6,fill=cond_colours[levels(conds)])
 
 #Variance Stabilising the Counts
 #alternative to log2 transformation = VST transformation in DESeq2
@@ -77,12 +102,7 @@ vstcounts <- assay(vsd)
 vstcounts <- vstcounts[order(apply(vstcounts,1,sum),decreasing =TRUE),]
 
 #Doing a pairwise Pearson correlation --> plot on heatmap
-#Raw
-heatmap.2(cor(rawcounts),trace="none",col=hmcol,main="Sample to Sample Correlation (Raw Counts)",cexRow=0.5,cexCol=0.5,RowSideColors=cond_colours, margins=c(9,7))
-#VST
 heatmap.2(cor(vstcounts),trace="none",col=hmcol,main="Sample to Sample Correlation (VST)",cexRow=0.5,cexCol=0.5,RowSideColors=cond_colours, margins=c(9,7))
-#Logs2
-heatmap.2(cor(log2counts),trace="none",col=hmcol,main="Sample to Sample Correlation (Log2)",cexRow=0.5,cexCol=0.5,RowSideColors=cond_colours, margins=c(9,7))
 
 #PCA plot used to see if overexpression explains variance in results
 
@@ -113,12 +133,17 @@ legend("topleft",c("scrambled","miR-210"),fill=c("green","red"),cex=0.7)
 
 #The function nbinomWaldTest fits a negative binomial generalized linear model to each gene and then calculates the significance of the estimated coeffients. We contrast the control and the overexpressed miR210 samples.
 p_threshold=0.05
-lfc_threshold=1
+lfc_threshold=0.8
 
 cds <- nbinomWaldTest(dds)
 
-res=results(cds,contrast=c("treatment","miR210","Scr"))
+# Compare the two conditions of interest
+res=results(cds,contrast=c("conds","miR210","Scr"))
+
+# Resort the list
 res <- res[order(res$padj),]
+
+# Find Significant genes   PValue < threshold   Lfc > < threshold
 sig = rownames(res[(abs(res$log2FoldChange) > lfc_threshold) & (res$padj < p_threshold) & !is.na(res$padj),])
 
 #Volcano Plot allows visualisation of the differentially expressed genes
