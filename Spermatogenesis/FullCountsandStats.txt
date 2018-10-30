@@ -1,1 +1,0 @@
-Row.names	V1	V2	V3	V4	3LT4_dnmt3l	3LT5_dnmt3l	3LT6_dnmt3l	MT4_mili	MT5_mili	MT6_mili	T1_control	T2_control	T3_control	T4_miwi2	T5_miwi2	T6_miwi2	baseMean	log2FoldChange	lfcSE	stat	pvalue	padj

@@ -14,11 +14,11 @@ names=read.table('gene_names.txt')
 
 #load pdata
 pdata=read.table('pdata2.txt',header=TRUE)
-colnames(pdata2)
-rownames(pdata2)
+colnames(pdata)
+rownames(pdata)
 
 #set conditions
-conds=as.factor(pdata2$condition)
+conds=as.factor(pdata$condition)
 conds2=as.vector(conds)
 
 #Set colours
@@ -26,7 +26,7 @@ cond_colours = brewer.pal(length(unique(conds)),"Accent")
 names(cond_colours)=unique(conds)
 
 #Insert counts from HTSeq 
-ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata2, directory = '/Users/tm582/Desktop/part2_project/Spermatogenesis', design= ~ condition)
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory = '/Users/tm582/Desktop/part2_project/Spermatogenesis', design= ~ condition)
 
 colData(ddsHTSeq)$condition=factor(colData(ddsHTSeq)$condition, levels=levels(pdata$condition))
 
@@ -35,7 +35,7 @@ coldata=as.data.frame(t(t(conds)))
 colnames(coldata)='condition'
 
 #Data normalisation
-dds=estimaddteSizeFactors(ddsHTSeq)
+dds=estimateSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
 
 normcounts <- counts(dds, normalized=TRUE)
@@ -45,11 +45,11 @@ log2counts=log2(normcounts+1)
 #Raw counts Bar Plot
 quartz()
 par(mfrow=c(2,1))
-barplot(apply(rawcounts,2,sum), las=2, col=cond_colours, main='Raw Counts', cex.names = 0.5)
+barplot(apply(rawcounts,2,sum), las=2, col=cond_colours, main='Raw Counts', cex.names = 0.5, cex.axis = 0.8)
 legend("topleft",levels((conds)),cex=0.5,fill=cond_colours)
 
 #Normalised Bar plot
-barplot(apply(normcounts,2,sum), las=2, col=cond_colours, main='Normalised Counts', cex.names=0.5)
+barplot(apply(normcounts,2,sum), las=2, col=cond_colours, main='Normalised Counts', cex.names=0.5, cex.axis = 0.8)
 legend('topleft',levels((conds)),cex=0.5,fill=cond_colours)
 
 #Dispersion Plot
@@ -76,6 +76,8 @@ heatmap.2(cor(assay(vsd)),trace='none',main='Sample Correlation Variance Stabili
 
 #Sample to Sample PCA
 #QUESTION: Why doesn't 'conds' work as a label wehn as.factor but as.vector does work?
+quartz()
+pca=princomp(assay(vsd))
 plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
 text(pca$loadings, conds2, pos=1, cex=0.8)
 
@@ -166,11 +168,33 @@ quartz()
 heatmap.2(vstMat[hits.miwi2,],trace='none',col=hmcol,labRow=names[hits.miwi2,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main='Heatmap Sig. Hits for miwi2')
 
 ##FULL RESULTS
-#PROBLEM: combining all the condition data sets
-#PROBLEM: No data being added into the full results table
-fullresults=merge(names,counts_table,by.x=0,by.y=0)
-fullresults=merge(fullresults, as.matrix(res.dnmt3l), by.x=1,by.y=0)
-fullresults=fullresults[order(fullresults$log2FoldChange,decreasing = TRUE),]
-fullresults=fullresults[!is.na(fullresults$log2FoldChange),]
-rownames(fullresults)=fullresults$Row.names
-write.table(fullresults,'FullCountsandStats.txt',sep='\t', quote=F)
+#HOW TO?: combining all the condition data sets
+#QUESTION: Are these all just producing the same results table?
+
+fullres.dnmt3l=merge(names,counts_table,by.x=1,by.y=0)
+fullres.dnmt3l=merge(fullres.dnmt3l, as.matrix(res.dnmt3l), by.x=1,by.y=0)
+fullres.dnmt3l=fullres.dnmt3l[order(fullres.dnmt3l$log2FoldChange,decreasing = TRUE),]
+fullres.dnmt3l=fullres.dnmt3l[!is.na(fullres.dnmt3l$log2FoldChange),]
+rownames(fullres.dnmt3l)=fullres.dnmt3l$Row.names
+write.table(fullres.dnmt3l,'FullRes.dnmt3l.txt',sep='\t', quote=F)
+
+fullres.mili=merge(names,counts_table,by.x=1,by.y=0)
+fullres.mili=merge(fullres.mili, as.matrix(res.mili), by.x=1,by.y=0)
+fullres.mili=fullres.mili[order(fullres.mili$log2FoldChange,decreasing = TRUE),]
+fullres.mili=fullres.mili[!is.na(fullres.mili$log2FoldChange),]
+rownames(fullres.mili)=fullres.mili$Row.names
+write.table(fullres.mili,'FullRes.mili.txt',sep='\t', quote=F)
+
+fullres.miwi2=merge(names,counts_table,by.x=1,by.y=0)
+fullres.miwi2=merge(fullres.miwi2, as.matrix(res.miwi2), by.x=1,by.y=0)
+fullres.miwi2=fullres.miwi2[order(fullres.miwi2$log2FoldChange,decreasing = TRUE),]
+fullres.miwi2=fullres.miwi2[!is.na(fullres.miwi2$log2FoldChange),]
+rownames(fullres.miwi2)=fullres.miwi2$Row.names
+write.table(fullres.miwi2,'FullRes.miwi2.txt',sep='\t', quote=F)
+
+dnmt3l.table=read.table('FullRes.dnmt3l.txt')
+View(dnmt3l.table)
+mili.table=read.table('FullRes.mili.txt')
+View(mili.table)
+miwi2.table=read.table('FullRes.miwi2.txt')
+View(miwi2.table)

@@ -28,6 +28,7 @@ vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 
 #PCA plots
+pca=princomp(assay(vsd))
 plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
 text(pca$loadings, conds, pos=1, cex=0.8)
 
