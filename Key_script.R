@@ -27,6 +27,11 @@ vsd <- varianceStabilizingTransformation(dds)
 vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 
+#PCA plots
+plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
+text(pca$loadings, conds, pos=1, cex=0.8)
+
+
 #Volcano Plots
 plot(RESULTSDATA$log2FoldChange,-log(RESULTSDATA$padj,10), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= 'Volcano Plot: Control vs CONDITION', pch=19, cex=0.2)
 text(RESULTSDATA[HITSDATA,]$log2FoldChange,-log(RESULTSDATA[HITSDATA,]$padj,10),labels=names[rownames(RESULTSDATA[HITSDATA,]),'COLUMN WITHIN DATA'],pos=3,cex=0.4)

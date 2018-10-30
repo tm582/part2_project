@@ -2,6 +2,7 @@
 setwd("/Macintosh HD/Users/Tara/Desktop/part2_project/Spermatogenesis")
 #Lab
 setwd("~/Desktop/part2_project/Spermatogenesis")
+
 library(RColorBrewer)
 library(gplots)
 library(DESeq2)
@@ -18,6 +19,8 @@ rownames(pdata2)
 
 #set conditions
 conds=as.factor(pdata2$condition)
+conds2=as.vector(conds)
+
 #Set colours
 cond_colours = brewer.pal(length(unique(conds)),"Accent")
 names(cond_colours)=unique(conds)
@@ -25,7 +28,6 @@ names(cond_colours)=unique(conds)
 #Insert counts from HTSeq 
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata2, directory = '/Users/tm582/Desktop/part2_project/Spermatogenesis', design= ~ condition)
 
-#further code
 colData(ddsHTSeq)$condition=factor(colData(ddsHTSeq)$condition, levels=levels(pdata$condition))
 
 #pre normalisation
@@ -45,10 +47,12 @@ quartz()
 par(mfrow=c(2,1))
 barplot(apply(rawcounts,2,sum), las=2, col=cond_colours, main='Raw Counts', cex.names = 0.5)
 legend("topleft",levels((conds)),cex=0.5,fill=cond_colours)
+
 #Normalised Bar plot
 barplot(apply(normcounts,2,sum), las=2, col=cond_colours, main='Normalised Counts', cex.names=0.5)
 legend('topleft',levels((conds)),cex=0.5,fill=cond_colours)
 
+#Dispersion Plot
 quartz()
 dds=nbinomWaldTest(dds)
 counts_table=counts(dds, normalized=TRUE)
@@ -71,10 +75,9 @@ quartz()
 heatmap.2(cor(assay(vsd)),trace='none',main='Sample Correlation Variance Stabilised',col=hmcol,cexRow=0.5,cexCol=0.5)
 
 #Sample to Sample PCA
+#QUESTION: Why doesn't 'conds' work as a label wehn as.factor but as.vector does work?
 plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
-text(pca$loadings, conds, pos=3, cex=0.8)
-#QUESTIONS: What is 'pch', 'pos'
-#PROBLEM = NEED TO LABEL POINTS WITH CONDITION NAME
+text(pca$loadings, conds2, pos=1, cex=0.8)
 
 #Statistical Analysis
 ##CONFUSED FROM HERE
@@ -106,7 +109,7 @@ miwi2_median=apply(vstMat[,10:12],1,median)
 
 #Plotting - Scatterplot
 #PROBLEM - need to work out how to highlight outliers from HITS ^ see above
-#PROBLEM - text function is not labelling the points with respective names
+#PROBLEM - text function is not labelling the points with correct names want to label with gene names from names$V2 that correspond to hits 
 #Control vs. dnmt3l
 quartz()
 par(mfrow=c(3,1))
