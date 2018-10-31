@@ -10,6 +10,7 @@ library(DESeq2)
 hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
 
 #load count data
+rownames(names)=names$V1
 names=read.table('gene_names.txt')
 
 #load pdata
@@ -94,11 +95,46 @@ res.miwi2=res.miwi2[order(res.miwi2$padj),]
 
 #List of Statistical hits
 #QUESTION: Do the hits have to be separate as pairwise comparisons or are they compiled together - how does this follow through when plotting...
-hits.dnmt3l=(rownames(res.dnmt3l[((res.dnmt3l$padj<=0.05) & (abs(res.dnmt3l$log2FoldChange)>=1) & (!is.na(res.dnmt3l$padj))),]))
 
-hits.mili=(rownames(res.mili[((res.mili$padj<=0.05) & (abs(res.mili$log2FoldChange)>=1) & (!is.na(res.mili$padj))),]))
 
-hits.miwi2=(rownames(res.miwi2[((res.miwi2$padj<=0.05) & (abs(res.miwi2$log2FoldChange)>=1) & (!is.na(res.miwi2$padj))),]))
+p_threshold=0.05
+lfc_threshold=0.7
+
+
+condition_list=levels(conds)
+for (i in 2:length(condition_list)){
+  
+    control=condition_list[1]
+    compare=condition_list[i]
+    print(paste("Comparing:",control," vs ",compare))
+    
+    rm(res)
+    res=results(dds, contrast=c('condition', control, compare))
+    res=res[order(res$padj),]
+    
+    rm(hits)
+    hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+    
+    print(paste("Found: ",length(hits)," Statistical hits"))
+    
+    quartz()
+    plot(res$log2FoldChange,-log(res$padj,10), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= paste("Comparing:",control," vs ",compare), pch=19, cex=0.2)
+    text(res[hits,]$log2FoldChange,-log(res[hits,]$padj,10),labels=names[hits,]$V2,pos=3,cex=0.4)
+    points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+    abline(h=-log10(0.05), lty=3)
+    abline(v=-1, lty=3)
+    abline(v=1, lty=3)
+    
+}
+
+
+
+
+hits.dnmt3l=(rownames(res.dnmt3l[((res.dnmt3l$padj<=p_threshold) & (abs(res.dnmt3l$log2FoldChange)>=lfc_threshold) & (!is.na(res.dnmt3l$padj))),]))
+
+hits.mili=(rownames(res.mili[((res.mili$padj<=p_threshold) & (abs(res.mili$log2FoldChange)>=lfc_threshold) & (!is.na(res.mili$padj))),]))
+
+hits.miwi2=(rownames(res.miwi2[((res.miwi2$padj<=p_threshold) & (abs(res.miwi2$log2FoldChange)>=lfc_threshold) & (!is.na(res.miwi2$padj))),]))
 
 #Analysis of Sample Median Data
 control_median=apply(vstMat[,7:9],1,median)
@@ -137,14 +173,14 @@ quartz()
 par(mfrow=c(3,1))
 
 plot(res.dnmt3l$log2FoldChange,-log(res.dnmt3l$padj,10), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= 'Volcano Plot: Control vs dnmt3l', pch=19, cex=0.2)
-text(res.dnmt3l[hits.dnmt3l,]$log2FoldChange,-log(res.dnmt3l[hits.dnmt3l,]$padj,10),labels=names[rownames(res.dnmt3l[hits.dnmt3l,]),'V2'],pos=3,cex=0.4)
+text(res.dnmt3l[hits.dnmt3l,]$log2FoldChange,-log(res.dnmt3l[hits.dnmt3l,]$padj,10),labels=names[hits.dnmt3l,]$V2,pos=3,cex=0.4)
 points(res.dnmt3l[hits.dnmt3l,'log2FoldChange'],-log(res.dnmt3l[hits.dnmt3l,'padj'],10),pch=21,cex=0.4,col='turquoise1')
 abline(h=-log10(0.05), lty=3)
 abline(v=-1, lty=3)
 abline(v=1, lty=3)
 
 plot(res.mili$log2FoldChange,-log(res.mili$padj,10), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= 'Volcano Plot: Control vs mili', pch=19, cex=0.2)
-text(res.mili[hits.mili,]$log2FoldChange,-log(res.mili[hits.mili,]$padj,10),labels=names[rownames(res.mili[hits.mili,]),'V2'],pos=3,cex=0.4)
+text(res.mili[hits.mili,]$log2FoldChange,-log(res.mili[hits.mili,]$padj,10),labels=names[hits.mili,]$V2,pos=3,cex=0.4)
 points(res.mili[hits.mili,'log2FoldChange'],-log(res.mili[hits.mili,'padj'],10),pch=21,cex=0.4,col='turquoise1')
 abline(h=-log10(0.05), lty=3)
 abline(v=-1, lty=3)
