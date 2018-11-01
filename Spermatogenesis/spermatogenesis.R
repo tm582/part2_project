@@ -10,8 +10,8 @@ library(DESeq2)
 hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
 
 #load count data
-rownames(names)=names$V1
 names=read.table('gene_names.txt')
+rownames(names)=names$V1
 
 #load pdata
 pdata=read.table('pdata2.txt',header=TRUE)
@@ -76,14 +76,17 @@ quartz()
 heatmap.2(cor(assay(vsd)),trace='none',main='Sample Correlation Variance Stabilised',col=hmcol,cexRow=0.5,cexCol=0.5)
 
 #Sample to Sample PCA
-#QUESTION: Why doesn't 'conds' work as a label wehn as.factor but as.vector does work?
 quartz()
 pca=princomp(assay(vsd))
 plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
 text(pca$loadings, conds2, pos=1, cex=0.8)
 
 #Statistical Analysis
-##CONFUSED FROM HERE
+
+p_threshold=0.05
+lfc_threshold=0.7
+
+#Long - results calculation
 res.dnmt3l=results(dds, contrast=c('condition', 'control', 'dnmt3l'))
 res.dnmt3l=res.dnmt3l[order(res.dnmt3l$padj),]
 
@@ -93,48 +96,52 @@ res.mili=res.mili[order(res.mili$padj),]
 res.miwi2=results(dds, contrast=c('condition', 'control', 'miwi2'))
 res.miwi2=res.miwi2[order(res.miwi2$padj),]
 
-#List of Statistical hits
-#QUESTION: Do the hits have to be separate as pairwise comparisons or are they compiled together - how does this follow through when plotting...
-
-
-p_threshold=0.05
-lfc_threshold=0.7
-
-
-condition_list=levels(conds)
-for (i in 2:length(condition_list)){
-  
-    control=condition_list[1]
-    compare=condition_list[i]
-    print(paste("Comparing:",control," vs ",compare))
-    
-    rm(res)
-    res=results(dds, contrast=c('condition', control, compare))
-    res=res[order(res$padj),]
-    
-    rm(hits)
-    hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
-    
-    print(paste("Found: ",length(hits)," Statistical hits"))
-    
-    quartz()
-    plot(res$log2FoldChange,-log(res$padj,10), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= paste("Comparing:",control," vs ",compare), pch=19, cex=0.2)
-    text(res[hits,]$log2FoldChange,-log(res[hits,]$padj,10),labels=names[hits,]$V2,pos=3,cex=0.4)
-    points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
-    abline(h=-log10(0.05), lty=3)
-    abline(v=-1, lty=3)
-    abline(v=1, lty=3)
-    
-}
-
-
-
-
+#Long - List of Statistical hits
 hits.dnmt3l=(rownames(res.dnmt3l[((res.dnmt3l$padj<=p_threshold) & (abs(res.dnmt3l$log2FoldChange)>=lfc_threshold) & (!is.na(res.dnmt3l$padj))),]))
 
 hits.mili=(rownames(res.mili[((res.mili$padj<=p_threshold) & (abs(res.mili$log2FoldChange)>=lfc_threshold) & (!is.na(res.mili$padj))),]))
 
 hits.miwi2=(rownames(res.miwi2[((res.miwi2$padj<=p_threshold) & (abs(res.miwi2$log2FoldChange)>=lfc_threshold) & (!is.na(res.miwi2$padj))),]))
+
+#For loop - results, hits, volcano plots, heatmaps
+#PROBLEM: labelling graphs with condition
+
+condition_list=levels(conds)
+condition_list=levels(conds)
+for (i in 2:length(condition_list)){
+  
+  control=condition_list[1]
+  compare=condition_list[i]
+  print(paste("Comparing:",control," vs ",compare))
+  
+  rm(res)
+  res=results(dds, contrast=c('condition', control, compare))
+  res=res[order(res$padj),]
+  
+  rm(hits)
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+  print(paste("Found: ",length(hits)," Statistical hits"))
+  
+  quartz()
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= substitute(paste('Volcano Plot:', control, 'vs', compare)), pch=19, cex=0.2)
+  text(res[hits,]$log2FoldChange,-log(res[hits,]$padj,10),labels=names[hits,]$V2,pos=3,cex=0.4)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  abline(h=-log10(0.05), lty=3)
+  abline(v=-1, lty=3)
+  abline(v=1, lty=3)
+  
+  quartz()
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for", compare)))
+
+  fullres=merge(names,counts_table,by.x=1,by.y=0)
+  fullres=merge(fullres, as.matrix(res), by.x=1,by.y=0)
+  fullres=fullres[order(fullres$log2FoldChange,decreasing = TRUE),]
+  fullres=fullres[!is.na(fullres$log2FoldChange),]
+  rownames(fullres)=fullres$Row.names
+  write.table(fullres,'FullRes.txt',sep='\t', quote=F)
+  
+  }
 
 #Analysis of Sample Median Data
 control_median=apply(vstMat[,7:9],1,median)
@@ -202,35 +209,3 @@ heatmap.2(vstMat[hits.mili,],trace='none',col=hmcol,labRow=names[hits.mili,'V2']
 
 quartz()
 heatmap.2(vstMat[hits.miwi2,],trace='none',col=hmcol,labRow=names[hits.miwi2,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main='Heatmap Sig. Hits for miwi2')
-
-##FULL RESULTS
-#HOW TO?: combining all the condition data sets
-#QUESTION: Are these all just producing the same results table?
-
-fullres.dnmt3l=merge(names,counts_table,by.x=1,by.y=0)
-fullres.dnmt3l=merge(fullres.dnmt3l, as.matrix(res.dnmt3l), by.x=1,by.y=0)
-fullres.dnmt3l=fullres.dnmt3l[order(fullres.dnmt3l$log2FoldChange,decreasing = TRUE),]
-fullres.dnmt3l=fullres.dnmt3l[!is.na(fullres.dnmt3l$log2FoldChange),]
-rownames(fullres.dnmt3l)=fullres.dnmt3l$Row.names
-write.table(fullres.dnmt3l,'FullRes.dnmt3l.txt',sep='\t', quote=F)
-
-fullres.mili=merge(names,counts_table,by.x=1,by.y=0)
-fullres.mili=merge(fullres.mili, as.matrix(res.mili), by.x=1,by.y=0)
-fullres.mili=fullres.mili[order(fullres.mili$log2FoldChange,decreasing = TRUE),]
-fullres.mili=fullres.mili[!is.na(fullres.mili$log2FoldChange),]
-rownames(fullres.mili)=fullres.mili$Row.names
-write.table(fullres.mili,'FullRes.mili.txt',sep='\t', quote=F)
-
-fullres.miwi2=merge(names,counts_table,by.x=1,by.y=0)
-fullres.miwi2=merge(fullres.miwi2, as.matrix(res.miwi2), by.x=1,by.y=0)
-fullres.miwi2=fullres.miwi2[order(fullres.miwi2$log2FoldChange,decreasing = TRUE),]
-fullres.miwi2=fullres.miwi2[!is.na(fullres.miwi2$log2FoldChange),]
-rownames(fullres.miwi2)=fullres.miwi2$Row.names
-write.table(fullres.miwi2,'FullRes.miwi2.txt',sep='\t', quote=F)
-
-dnmt3l.table=read.table('FullRes.dnmt3l.txt')
-View(dnmt3l.table)
-mili.table=read.table('FullRes.mili.txt')
-View(mili.table)
-miwi2.table=read.table('FullRes.miwi2.txt')
-View(miwi2.table)
