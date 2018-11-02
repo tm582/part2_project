@@ -132,7 +132,7 @@ for (i in 2:length(condition_list)){
   abline(v=1, lty=3)
   
   quartz()
-  heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for", compare)))
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for", i)))
 
   fullres=merge(names,counts_table,by.x=1,by.y=0)
   fullres=merge(fullres, as.matrix(res), by.x=1,by.y=0)
@@ -153,8 +153,6 @@ mili_median=apply(vstMat[,4:6],1,median)
 miwi2_median=apply(vstMat[,10:12],1,median)
 
 #Plotting - Scatterplot
-#PROBLEM - need to work out how to highlight outliers from HITS ^ see above
-#PROBLEM - text function is not labelling the points with correct names want to label with gene names from names$V2 that correspond to hits 
 #Control vs. dnmt3l
 quartz()
 par(mfrow=c(3,1))
