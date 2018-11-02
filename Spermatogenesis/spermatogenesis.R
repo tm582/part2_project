@@ -132,7 +132,7 @@ for (i in 2:length(condition_list)){
   abline(v=1, lty=3)
   
   quartz()
-  heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for", i)))
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits,'V2'],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for", compare                                                                      )))
 
   fullres=merge(names,counts_table,by.x=1,by.y=0)
   fullres=merge(fullres, as.matrix(res), by.x=1,by.y=0)

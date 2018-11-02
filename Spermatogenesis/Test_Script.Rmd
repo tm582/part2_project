@@ -1,0 +1,41 @@
+---
+title: "Liver Cancer Analysis"
+author: "Tara Morrison"
+date: "02/11/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+The cat ran over **the** dog.
+
+* Hello
+* Hello 2
+* Hello 3
+
+RowName|GeneName|Test
+-------|--------|----
+a|b|c
+
+
+Load libraries I need for the analysis
+```{r}
+
+library(gplots)
+
+```
+
+# Make a little plot
+
+Plot the *iris* data
+```{r}
+
+plot(iris)
+
+```
+
+
