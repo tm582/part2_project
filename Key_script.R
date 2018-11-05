@@ -39,6 +39,8 @@ quartz()
 par(mfrow=c(2,1))
 barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours, las=2,cex.names=0.5,main='Pre Normalised Counts')
 barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours, las=2,cex.names=0.5,main='Post Normalised Counts')
+#Add legends if required
+
 
 #Dispersion Plot
 quartz()

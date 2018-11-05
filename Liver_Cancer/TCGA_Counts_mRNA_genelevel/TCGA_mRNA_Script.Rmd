@@ -1,0 +1,74 @@
+---
+title: "TCGA_mRNA_script"
+author: "Tara Morrison"
+date: "05/11/2018"
+output: word_document
+---
+##Initial set up
+Working Directory (Lab) & Libraries
+``` {r}
+setwd("~/Desktop/part2_project/Liver_Cancer")
+
+library(RColorBrewer)
+library(gplots)
+library(DESeq2)
+```
+
+##Upload pdata
+Need to find gene names table
+```{r}
+pdata=read.table(pdata=read.table('pdata_rnaseq_genelevel.txt', row.names=1, header=T))
+```
+
+##Set Conditions/Sample Types
+There are 3 levels: Primary Tumour, Recurrent Tumour and Normal Tissue
+```{r}
+conds=(pdata$Sample_Type)
+cond_colours=brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+```
+
+##Read in count data
+Data taken from TCGA data repository - Liver Cancer mRNA
+datatype=HTSeq count data
+```{r}
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory = "~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel", design = ~ Sample_Type)
+
+dds=estimateSizeFactors(ddsHTSeq)
+dds=estimateDispersions(dds)
+```
+
+##Data Normalisation
+
+```{r}
+normcounts <- counts(dds, normalized=TRUE)
+rawcounts=counts(dds,normalized=FALSE)
+log2counts=log2(normcounts+1)
+```
+
+
+##Quality Control
+```{r echo = FALSE}
+quartz()
+par(mfrow=c(1,2))
+barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours, las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topleft",levels((conds)),cex=0.5,fill=cond_colours)
+barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours, las=2,cex.names=0.5,main='Post Normalised Counts')
+legend('topleft',levels((conds)),cex=0.5,fill=cond_colours)
+```
+
+##Dispersion Plot
+```{r echo = FALSE}
+dds=nbinomWaldTest(dds)
+counts_table=counts(dds, normalized=TRUE)
+quartz()
+plotDispEsts(dds,main='Dispersion Plot')
+```
+
+##Variance Stabilising Transformation
+```{r}
+vsd <- varianceStabilizingTransformation(dds)
+vstMat <- assay(vsd)
+vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -27,7 +27,7 @@ cond_colours = brewer.pal(length(unique(conds)),"Accent")
 names(cond_colours)=unique(conds)
 
 #Insert counts from HTSeq 
-ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory = '/Users/tm582/Desktop/part2_project/Spermatogenesis', design= ~ condition)
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = prm(data, directory = '/Users/tm582/Desktop/part2_project/Spermatogenesis', design= ~ condition)
 
 colData(ddsHTSeq)$condition=factor(colData(ddsHTSeq)$condition, levels=levels(pdata$condition))
 
