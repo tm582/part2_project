@@ -7,7 +7,7 @@ output: word_document
 ##Initial set up
 Working Directory (Lab) & Libraries
 ``` {r}
-setwd("~/Desktop/part2_project/Liver_Cancer")
+setwd("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel")
 
 library(RColorBrewer)
 library(gplots)
@@ -70,5 +70,34 @@ plotDispEsts(dds,main='Dispersion Plot')
 vsd <- varianceStabilizingTransformation(dds)
 vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
+```
 
+#PCA Plots
+```{r echo = FALSE}
+pca=princomp(assay(vsd))
+quartz()
+plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
+text(pca$loadings, conds, pos=1, cex=0.8)
+```
+
+#Statistical Analysis
+P threshold is set to 0.05.
+log fold change threshold set to 0.7
+```{r}
+p_threshold=0.05
+lfc_threshold=0.7
+
+for (i in 1:length(condition_list)){
+ 
+  normal=condition_list[3]
+  compare=condition_list[i]
+
+  print(paste('Comparing', normal, 'vs.', compare))
+
+  rm(res)
+  res=results(dds, contrast = c('Sample_Type', normal, compare))
+  res=res[order(res$padj)]
+  
+}
+```
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
