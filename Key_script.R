@@ -27,7 +27,6 @@ colnames(coldata)='condition'
 dds<-DESeqDataSetFromMatrix(countdata=tablename,coldata=coldata,design=~treatment)
 
 #Data normalisation
-dds=estimaddteSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
 
 normcounts <- counts(dds, normalized=TRUE)
@@ -91,7 +90,6 @@ text(controlmedian[hits],conditionmedian[hits],cex=4,pos=4,labels = table[hits,c
 heatmap.2(vstMat[hits,],trace='none',col=hmcol,labRow=names[hits, column],cexRow=0.4,cexCol=0.6,las=2,Colv=FALSE,dendrogram='row',main=substitute(paste("Heatmap Sig. Hits for condition")))
 #FOR LOOPS - results, hits, volcano, heatmap
 
-condition_list=levels(conds)
 condition_list=levels(conds)
 for (i in 2:length(condition_list)){
   

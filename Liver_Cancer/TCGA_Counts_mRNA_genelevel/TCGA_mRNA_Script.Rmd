@@ -32,7 +32,7 @@ names(cond_colours)=unique(conds)
 Data taken from TCGA data repository - Liver Cancer mRNA
 datatype=HTSeq count data
 ```{r}
-ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory '~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel', design = ~ Sample_Type)
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel', design = ~ Sample_Type)
 
 coldata=as.data.frame(t(t(conds)))
 colnames(coldata)='Sample_Type'
@@ -73,8 +73,6 @@ plotDispEsts(dds,main='Dispersion Plot')
 vsd <- varianceStabilizingTransformation(dds)
 vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
-
-median=apply(vstMat[rows,columns],1,median)
 ```
 
 #PCA Plots
@@ -100,7 +98,9 @@ for (i in 1:length(condition_list)){
   compare=condition_list[i]
 
   print(paste('Comparing', normal, 'vs.', compare))
-
+  ##NEED TO WORK OUT HOW TO STOP COMPARING NORMAL WITH ITSELF
+  ##NEED TO COMPARE PRIAMRY vs RECURRENT?
+  ## NOT CURRENTLY WORKING
   rm(res)
   res=results(dds, contrast = c('Sample_Type', normal, compare))
   res=res[order(res$padj)]
