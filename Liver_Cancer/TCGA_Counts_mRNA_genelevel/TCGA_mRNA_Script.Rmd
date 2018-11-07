@@ -34,8 +34,7 @@ datatype=HTSeq count data
 ```{r}
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel', design = ~ Sample_Type)
 
-coldata=as.data.frame(t(t(conds)))
-colnames(coldata)='Sample_Type'
+colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
 dds=estimateSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
