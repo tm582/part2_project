@@ -17,7 +17,8 @@ library(DESeq2)
 ##Upload pdata
 Need to find gene names table
 ```{r}
-pdata=read.table(pdata=read.table('pdata_rnaseq_genelevel.txt', row.names=1, header=T))
+pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
+rownames(pdata)=pdata$Sample
 ```
 
 ##Set Conditions/Sample Types
@@ -32,7 +33,7 @@ names(cond_colours)=unique(conds)
 Data taken from TCGA data repository - Liver Cancer mRNA
 datatype=HTSeq count data
 ```{r}
-ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel', design = ~ Sample_Type)
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '.', design = ~ Sample_Type)
 
 colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
@@ -53,10 +54,10 @@ log2counts=log2(normcounts+1)
 ```{r echo = FALSE}
 quartz()
 par(mfrow=c(1,2))
-barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours, las=2,cex.names=0.5,main='Pre Normalised Counts')
-legend("topleft",levels((conds)),cex=0.5,fill=cond_colours)
-barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours, las=2,cex.names=0.5,main='Post Normalised Counts')
-legend('topleft',levels((conds)),cex=0.5,fill=cond_colours)
+barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topleft",levels((conds)),cex=0.5,fill=cond_colours[levels((conds))])
+barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend('topleft',levels((conds)),cex=0.5,fill=cond_colours[levels((conds))])
 ```
 
 ##Dispersion Plot
@@ -74,12 +75,15 @@ vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 ```
 
-#PCA Plots
+#PCA Plots & Heatmaps
 ```{r echo = FALSE}
 pca=princomp(assay(vsd))
 quartz()
-plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours,cex=1)
-text(pca$loadings, conds, pos=1, cex=0.8)
+plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours[pdata$Sample_Type],cex=1)
+text(pca$loadings, as.character(conds), pos=1, cex=0.4)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+heatmap.2(cor(vstcounts),trace="none",labRow = pdata$Sample_Type, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6)
 ```
 
 #Statistical Analysis
@@ -97,10 +101,7 @@ for (i in 1:length(condition_list)){
   compare=condition_list[i]
 
   print(paste('Comparing', normal, 'vs.', compare))
-  ##NEED TO WORK OUT HOW TO STOP COMPARING NORMAL WITH ITSELF
-  ##NEED TO COMPARE PRIAMRY vs RECURRENT?
-  ## NOT CURRENTLY WORKING
-  rm(res)
+  
   res=results(dds, contrast = c('Sample_Type', normal, compare))
   res=res[order(res$padj)]
   
