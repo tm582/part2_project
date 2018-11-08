@@ -12,6 +12,8 @@ setwd("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel")
 library(RColorBrewer)
 library(gplots)
 library(DESeq2)
+library(Rtsne)
+library(pca3d)
 ```
 
 ##Upload pdata
@@ -95,7 +97,7 @@ lfc_threshold=0.7
 
 condition_list=levels(conds)
 
-for (i in 1:length(condition_list)){
+for (i in 1:(length(condition_list)-1)){
  
   normal=condition_list[3]
   compare=condition_list[i]
