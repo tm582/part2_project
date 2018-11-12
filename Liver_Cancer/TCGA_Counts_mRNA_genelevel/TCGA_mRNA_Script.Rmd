@@ -146,19 +146,22 @@ quartz()
 plot(median.normal,median.primary, main="Solid_Tissue_Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
 abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
-text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = 'hit')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
 
 quartz()
 plot(median.normal,median.recurrent, main="Solid_Tissue_Normal vs. Recurrent_Tumor", pch=19, col='darkblue', cex=0.4)
 abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
-text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = 'hit')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
 
 ```
 
 #3D PCA Plots
 ```{r}
-plot
+pc=prcomp(assay(vsd))
+pca3d(pca, group=conds, col=cond_colours)
+quartz()
+pca2d(pca, group=conds, legend='bottomright')
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
