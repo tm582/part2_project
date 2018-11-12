@@ -94,7 +94,7 @@ plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_
 text(pca$loadings, as.character(conds), pos=1, cex=0.4)
 
 hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
-heatmap.2(cor(vstcounts),trace="none",labRow = pdata$Sample_Type, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6)
+heatmap.2(cor(vstcounts),trace="none",labRow = pdata$Sample_Type, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol)
 ```
 
 #Statistical Analysis
@@ -123,7 +123,7 @@ for (i in 1:(length(condition_list)-1)){
   quartz()
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
-  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = 'hit', pos=3, cex = 0.4)
+  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
   abline(h=-log10(0.05), lty=3)
   abline(v=-1, lty=3)
   abline(v=1, lty=3)
@@ -156,16 +156,9 @@ text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = 'hit')
 
 ```
 
-#Median Loop??
+#3D PCA Plots
 ```{r}
-median.primary=apply(vstMat[,1:4],1,median)
-median.recurrent=apply(vstMat[,5:7],1,median)
-median.normal=apply(vstMat[,8:12],1,median)
-
-medians=data.frame(Primary_Tumor=median.primary, Recurrent_Tumor=median.recurrent, Solid_Tissue_Normal=median.normal)
-
-normal.med=medians$Solid_Tissue_Normal
-
-compare=medians[,i]
+plot
+```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
