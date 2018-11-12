@@ -37,6 +37,15 @@ datatype=HTSeq count data
 ```{r}
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '.', design = ~ Sample_Type)
 
+# These gene IDs have extra numbers at the end, lets remove them
+rownames(ddsHTSeq) = gsub(".\\d+$","",rownames(ddsHTSeq),perl=T)
+# Load in Gene Names and Match up with rownames in ddsHTSeq
+
+gene_names = read.table("gene_names.txt",row.names=1,header = F)
+gene_names= gene_names[rownames(ddsHTSeq),]
+colnames(gene_names)=c("GeneName","Source","BioType")
+
+
 colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
 dds=estimateSizeFactors(ddsHTSeq)
@@ -105,8 +114,58 @@ for (i in 1:(length(condition_list)-1)){
   print(paste('Comparing', normal, 'vs.', compare))
   
   res=results(dds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj)]
+  res=res[order(res$padj),]
   
-}
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+  print(paste("Found: ",length(hits)," Statistical hits"))
+  
+  quartz()
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = 'hit', pos=3, cex = 0.4)
+  abline(h=-log10(0.05), lty=3)
+  abline(v=-1, lty=3)
+  abline(v=1, lty=3)
+  
+  quartz()
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare))
+
+  }
 ```
+
+##Median
+Long way - will look at creating loop to generate medians
+
+```{r echo=FALSE}
+median.primary=apply(vstMat[,1:4],1,median)
+median.recurrent=apply(vstMat[,5:7],1,median)
+median.normal=apply(vstMat[,8:12],1,median)
+
+quartz()
+plot(median.normal,median.primary, main="Solid_Tissue_Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = 'hit')
+
+quartz()
+plot(median.normal,median.recurrent, main="Solid_Tissue_Normal vs. Recurrent_Tumor", pch=19, col='darkblue', cex=0.4)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = 'hit')
+
+```
+
+#Median Loop??
+```{r}
+median.primary=apply(vstMat[,1:4],1,median)
+median.recurrent=apply(vstMat[,5:7],1,median)
+median.normal=apply(vstMat[,8:12],1,median)
+
+medians=data.frame(Primary_Tumor=median.primary, Recurrent_Tumor=median.recurrent, Solid_Tissue_Normal=median.normal)
+
+normal.med=medians$Solid_Tissue_Normal
+
+compare=medians[,i]
+
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
