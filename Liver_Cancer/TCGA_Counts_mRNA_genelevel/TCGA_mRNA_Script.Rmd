@@ -11,6 +11,7 @@ setwd("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel")
 
 library(RColorBrewer)
 library(gplots)
+library(ggplot2)
 library(DESeq2)
 library(Rtsne)
 library(pca3d)
@@ -162,6 +163,15 @@ pc=prcomp(assay(vsd))
 pca3d(pca, group=conds, col=cond_colours)
 quartz()
 pca2d(pca, group=conds, legend='bottomright')
+```
+
+
+##Rtsne
+```{r}
+tsne = Rtsne(t(vstMat), perplexity = 3)
+tnse.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(dds$Sample_Type))
+quartz()
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, shape= Type, colour=Type))+geom_point(size=4)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
