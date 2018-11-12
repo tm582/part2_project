@@ -36,8 +36,8 @@ log2counts=log2(normcounts+1)
 #QC
 quartz()
 par(mfrow=c(2,1))
-barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours, las=2,cex.names=0.5,main='Pre Normalised Counts')
-barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours, las=2,cex.names=0.5,main='Post Normalised Counts')
+barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Pre Normalised Counts')
+barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Post Normalised Counts')
 #Add legends if required
 
 
@@ -107,7 +107,7 @@ for (i in 2:length(condition_list)){
   print(paste("Found: ",length(hits)," Statistical hits"))
   
   quartz()
-  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= substitute(paste('Volcano Plot:', control, 'vs', compare)), pch=19, cex=0.2)
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P)', xlab='Log2 FoldChange', main= paste('Volcano Plot:', control, 'vs', compare), pch=19, cex=0.2)
   text(res[hits,]$log2FoldChange,-log(res[hits,]$padj,10),labels=names[hits,]$V2,pos=3,cex=0.4)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
   abline(h=-log10(0.05), lty=3)
