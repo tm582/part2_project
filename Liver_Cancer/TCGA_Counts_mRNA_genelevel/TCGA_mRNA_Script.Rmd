@@ -6,7 +6,7 @@ output: word_document
 ---
 ##Initial set up
 Working Directory (Lab) & Libraries
-``` {r}
+``` {r echo=FALSE}
 setwd("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel")
 
 library(RColorBrewer)
@@ -18,7 +18,6 @@ library(pca3d)
 ```
 
 ##Upload pdata
-Need to find gene names table
 ```{r}
 pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
@@ -38,14 +37,13 @@ datatype=HTSeq count data
 ```{r}
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '.', design = ~ Sample_Type)
 
-# These gene IDs have extra numbers at the end, lets remove them
+# These gene IDs have extra numbers at the end - folowing code used to remove
 rownames(ddsHTSeq) = gsub(".\\d+$","",rownames(ddsHTSeq),perl=T)
-# Load in Gene Names and Match up with rownames in ddsHTSeq
 
+# Load in Gene Names and match up with rownames in ddsHTSeq
 gene_names = read.table("gene_names.txt",row.names=1,header = F)
 gene_names= gene_names[rownames(ddsHTSeq),]
 colnames(gene_names)=c("GeneName","Source","BioType")
-
 
 colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
@@ -63,11 +61,14 @@ log2counts=log2(normcounts+1)
 
 
 ##Quality Control
-```{r echo = FALSE}
+Normalisation is generally ok. Consistent differences between both tumour tissues and normal tissues post-normalisation.
+```{r}
 quartz()
 par(mfrow=c(1,2))
+
 barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Pre Normalised Counts')
 legend("topleft",levels((conds)),cex=0.5,fill=cond_colours[levels((conds))])
+
 barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[pdata$Sample_Type], las=2,cex.names=0.5,main='Post Normalised Counts')
 legend('topleft',levels((conds)),cex=0.5,fill=cond_colours[levels((conds))])
 ```
@@ -75,7 +76,9 @@ legend('topleft',levels((conds)),cex=0.5,fill=cond_colours[levels((conds))])
 ##Dispersion Plot
 ```{r echo = FALSE}
 dds=nbinomWaldTest(dds)
+
 counts_table=counts(dds, normalized=TRUE)
+
 quartz()
 plotDispEsts(dds,main='Dispersion Plot')
 ```
@@ -88,6 +91,8 @@ vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 ```
 
 #PCA Plots & Heatmaps
+PCA plots shows good separation between tumour tissues and solid normals. One primary tumour point appears to be anomalous whilst another closer to recurrent tumour tissue type.
+Heatmap shows good clustering of solid tissue normals. Heatmap supports PCA plot in that one of the primary tumour points appears to be anomalous and does not closely match other primary tumours whilst another more closely matches recurrent tumour tissues.
 ```{r echo = FALSE}
 pca=princomp(assay(vsd))
 quartz()
@@ -95,12 +100,38 @@ plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_
 text(pca$loadings, as.character(conds), pos=1, cex=0.4)
 
 hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+quartz()
 heatmap.2(cor(vstcounts),trace="none",labRow = pdata$Sample_Type, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol)
+```
+
+##Rtsne
+tsne shows good separation between all tisuse types. Anomalous primary tumour point is less apparent in the tsne plot. One primary tumour point reamins closely grouped with recurrent tumours.
+```{r}
+#Normalised counts data into tsne object
+tsne = Rtsne(t(vstMat), perplexity = 3)
+#convert to data frame with 2 dimensions
+tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(dds$Sample_Type))
+quartz()
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, shape= Type, colour=Type))+geom_point(size=4)
 ```
 
 #Statistical Analysis
 P threshold is set to 0.05.
 log fold change threshold set to 0.7
+
+Comparing Solid_Tissue_Normal vs. Primary_Tumor
+Found:  2493  Statistical hits
+
+Comparing Solid_Tissue_Normal vs. Recurrent_Tumor
+Found:  3977  Statistical hits
+
+More hits (1484) found for recurrent tumour tissue suggesting that increased mutation lends itself to progression from primary to recurrent.
+Good separation of tumour types from solid tissue normal.
+Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours
+
+Example shared: up regulated: LINC002241, ZNF716
+Example shared down regulated: C1R, MT1H
+
 ```{r}
 p_threshold=0.05
 lfc_threshold=0.7
@@ -125,18 +156,18 @@ for (i in 1:(length(condition_list)-1)){
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
   text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
-  abline(h=-log10(0.05), lty=3)
-  abline(v=-1, lty=3)
-  abline(v=1, lty=3)
-  
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
+ 
   quartz()
-  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare))
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  
+}
 
-  }
 ```
 
 ##Median
-Long way - will look at creating loop to generate medians
 
 ```{r echo=FALSE}
 median.primary=apply(vstMat[,1:4],1,median)
@@ -145,19 +176,20 @@ median.normal=apply(vstMat[,8:12],1,median)
 
 quartz()
 plot(median.normal,median.primary, main="Solid_Tissue_Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
-abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
 text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 quartz()
 plot(median.normal,median.recurrent, main="Solid_Tissue_Normal vs. Recurrent_Tumor", pch=19, col='darkblue', cex=0.4)
-abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
 text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ```
 
 #3D PCA Plots
+Not currently working...
 ```{r}
 pc=prcomp(assay(vsd))
 pca3d(pca, group=conds, col=cond_colours)
@@ -165,13 +197,4 @@ quartz()
 pca2d(pca, group=conds, legend='bottomright')
 ```
 
-
-##Rtsne
-```{r}
-tsne = Rtsne(t(vstMat), perplexity = 3)
-tnse.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(dds$Sample_Type))
-quartz()
-ggplot(data = tsne.df, aes(tsne.1,  tsne.2, shape= Type, colour=Type))+geom_point(size=4)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+QUESTION: Is there are way of identifying if there are any genes not significant in either recurrent or primary but are significant in the other? Or identifying gene changes that are chared between the two?
