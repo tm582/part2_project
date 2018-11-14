@@ -17,7 +17,7 @@ library(Rtsne)
 library(pca3d)
 ```
 
-##Upload pdata
+##Upload pdata (TCGA)
 ```{r}
 pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
@@ -35,6 +35,8 @@ names(cond_colours)=unique(conds)
 Data taken from TCGA data repository - Liver Cancer mRNA
 datatype=HTSeq count data
 ```{r}
+##TCGA DATA COUNTS
+
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '.', design = ~ Sample_Type)
 
 # These gene IDs have extra numbers at the end - folowing code used to remove
@@ -49,16 +51,16 @@ colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=level
 
 dds=estimateSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
+
 ```
 
 ##Data Normalisation
-
 ```{r}
 normcounts <- counts(dds, normalized=TRUE)
 rawcounts=counts(dds,normalized=FALSE)
 log2counts=log2(normcounts+1)
-```
 
+```
 
 ##Quality Control
 Normalisation is generally ok. Consistent differences between both tumour tissues and normal tissues post-normalisation.
@@ -94,10 +96,18 @@ vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 PCA plots shows good separation between tumour tissues and solid normals. One primary tumour point appears to be anomalous whilst another closer to recurrent tumour tissue type.
 Heatmap shows good clustering of solid tissue normals. Heatmap supports PCA plot in that one of the primary tumour points appears to be anomalous and does not closely match other primary tumours whilst another more closely matches recurrent tumour tissues.
 ```{r echo = FALSE}
-pca=princomp(assay(vsd))
+
+#Normal PCA Plot
+pca=prcomp(t(assay(vsd)))
 quartz()
-plot(pca$loadings, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours[pdata$Sample_Type],cex=1)
-text(pca$loadings, as.character(conds), pos=1, cex=0.4)
+plot(pca$x, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours[pdata$Sample_Type],cex=1)
+text(pca$x, as.character(conds), pos=1, cex=0.4)
+summary(pca)
+
+#3D PCA Plot with 2D comparison
+pca3d(pca, group=conds, col=cond_colours)
+quartz()
+pca2d(pca, group=conds, col=cond_colours, legend='bottomright')
 
 hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
 quartz()
@@ -108,11 +118,14 @@ heatmap.2(cor(vstcounts),trace="none",labRow = pdata$Sample_Type, cexRow = 0.6, 
 tsne shows good separation between all tisuse types. Anomalous primary tumour point is less apparent in the tsne plot. One primary tumour point reamins closely grouped with recurrent tumours.
 ```{r}
 #Normalised counts data into tsne object
+set.seed(72)
 tsne = Rtsne(t(vstMat), perplexity = 3)
 #convert to data frame with 2 dimensions
 tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(dds$Sample_Type))
 quartz()
-ggplot(data = tsne.df, aes(tsne.1,  tsne.2, shape= Type, colour=Type))+geom_point(size=4)
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
 ```
 
 #Statistical Analysis
@@ -127,14 +140,14 @@ Found:  3977  Statistical hits
 
 More hits (1484) found for recurrent tumour tissue suggesting that increased mutation lends itself to progression from primary to recurrent.
 Good separation of tumour types from solid tissue normal.
-Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours
+Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours.
 
-Example shared: up regulated: LINC002241, ZNF716
-Example shared down regulated: C1R, MT1H
+Highlighted hits limited to 100.
 
 ```{r}
 p_threshold=0.05
 lfc_threshold=0.7
+max_display_hits=100
 
 condition_list=levels(conds)
 
@@ -150,6 +163,11 @@ for (i in 1:(length(condition_list)-1)){
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
   
+  if (length(hits) != 0){
+    if (length(hits)>max_display_hits){
+      hits=hits[1:max_display_hits]
+    }
+    
   print(paste("Found: ",length(hits)," Statistical hits"))
   
   quartz()
@@ -162,13 +180,15 @@ for (i in 1:(length(condition_list)-1)){
  
   quartz()
   heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  } else {
+    print(paste("No Results for ",compare))
+  }
   
 }
 
 ```
 
 ##Median
-
 ```{r echo=FALSE}
 median.primary=apply(vstMat[,1:4],1,median)
 median.recurrent=apply(vstMat[,5:7],1,median)
@@ -188,13 +208,99 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ```
 
-#3D PCA Plots
-Not currently working...
+
+
+
+
+
+
+
+
+
+
+##GTEX DATA
+
+## Load in GTEX Data
 ```{r}
-pc=prcomp(assay(vsd))
-pca3d(pca, group=conds, col=cond_colours)
-quartz()
-pca2d(pca, group=conds, legend='bottomright')
+
+gtex=readRDS("GTEX.rds")
+
+# We obtained a simple table from the raw GTEX sample attributes using:
+# cut -f 1,6,7 gtex_sample_attributes.txt  | sort -k2 > gtex_simple_samples.txt
+# included: Sample IDs, Tissue, Tissue Description
+
+#All GTEX Samples for all Tissue types
+gtex_samples=read.table("gtex_simple_samples.txt",row.names=1,sep="\t",header=F)
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
 ```
 
-QUESTION: Is there are way of identifying if there are any genes not significant in either recurrent or primary but are significant in the other? Or identifying gene changes that are chared between the two?
+#Merging GTEX Data with TCGA Data
+```{r}
+#MERGE GTEX & TCGA MATRICES
+mergedcounts=merge(gtex,rawcounts, by=0, all=T)
+rownames(mergedcounts)=mergedcounts$Row.names
+mergedcounts=mergedcounts[,-1]
+mergedcounts[is.na(mergedcounts)]=0
+
+#Define conditions for each type - LONG WAY
+
+conds_merged=c('gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','Primary_Tumor','Primary_Tumor','Primary_Tumor','Primary_Tumor','Recurrent_Tumor', 'Recurrent_Tumor', 'Recurrent_Tumor', 'Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal', 'Solid_Tissue_Normal')
+
+conds_merged_colours=brewer.pal(length(unique(conds_merged)), 'Set1')
+names(conds_merged_colours)=unique(conds_merged)
+
+#Set up coldata table
+coldata=as.data.frame(conds_merged)
+
+#DESeq Object from merges counts matrix 'mergedcounts'
+mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~conds_merged)
+
+mergedds=estimateSizeFactors(mergeddsHTSeq)
+mergedds=estimateDispersions(mergedds)
+
+```
+
+#Data normalisation
+
+```{r}
+mergenormcounts <- counts(mergedds, normalized=TRUE)
+mergerawcounts=counts(mergedds,normalized=FALSE)
+mergelog2counts=log2(mergenormcounts+1)
+
+quartz()
+barplot(colSums(counts(mergedds, normalized=FALSE)), col=conds_merged_colours[coldata$conds_merged], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topleft",levels((conds_merged)),cex=0.5,fill=conds_merged_colours[levels((conds_merged))])
+
+quartz()
+barplot(colSums(counts(mergedds, normalized=TRUE)), col=conds_merged_colours[coldata$conds_merged], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend("topleft",levels((conds_merged)),cex=0.5,fill=conds_merged_colours[levels((conds_merged))])
+```
+
+#PCA Plots & Heatmaps
+```{r}
+mergepca=prcomp(t(assay(mergevsd)))
+quartz()
+plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$conds_merged], cex=1)
+text(mergepca$x, as.character(conds_merged), pos=1, cex=0.4)
+
+
+mergepca2=princomp(assay(mergevsd))
+plot(mergepca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$conds_merged], cex=1)
+text(mergepca2$loadings, as.character(conds_merged), pos=1, cex=0.4)
+
+quartz()
+heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$conds_merged, cexRow = 0.6, labCol = coldata$conds_merged, cexCol = 0.6, col=hmcol)
+
+set.seed(72)
+mergetsne = Rtsne(t(mergevstMat), perplexity = 3)
+mergetsne.df=data.frame(mergetsne.1=mergetsne$Y[,1], mergetsne.2=mergetsne$Y[,2], Type=as.factor(mergedds$conds_merged))
+
+quartz()
+ggplot(data = mergetsne.df, aes(mergetsne.1,  mergetsne.2, colour=Type, shape=Type))+
++ geom_point(size=4)+
+  scale_color_manual(values=unique(conds_merged_colours[mergetsne.df$Type]))
