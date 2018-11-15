@@ -15,6 +15,7 @@ library(ggplot2)
 library(DESeq2)
 library(Rtsne)
 library(pca3d)
+library(limma)
 ```
 
 ##Upload pdata (TCGA)
@@ -237,20 +238,21 @@ liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
 liver_ids = gsub("-",".",liver_ids)
 gtex = gtex[,intersect(liver_ids,colnames(gtex))]
 
+gtex[intersect(liver_ids,rownames(gtex)),]
+
+common_ids = intersect(rownames(gtex),rownames(rawcounts))
+
+gtex  = gtex[common_ids, ]
+rawcounts = rawcounts[common_ids, ] 
 ```
 
 #Merging GTEX Data with TCGA Data
 ```{r}
 #MERGE GTEX & TCGA MATRICES
-mergedcounts=merge(gtex,rawcounts, by=0, all=T)
-rownames(mergedcounts)=mergedcounts$Row.names
-mergedcounts=mergedcounts[,-1]
-mergedcounts[is.na(mergedcounts)]=0
+mergedcounts=cbind(gtex, rawcounts, deparse.level = 1)
 
-#Define conditions for each type - LONG WAY
 
 conds_merged=c('gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','Primary_Tumor','Primary_Tumor','Primary_Tumor','Primary_Tumor','Recurrent_Tumor', 'Recurrent_Tumor', 'Recurrent_Tumor', 'Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal', 'Solid_Tissue_Normal')
-
 conds_merged_colours=brewer.pal(length(unique(conds_merged)), 'Set1')
 names(conds_merged_colours)=unique(conds_merged)
 
@@ -302,5 +304,5 @@ mergetsne.df=data.frame(mergetsne.1=mergetsne$Y[,1], mergetsne.2=mergetsne$Y[,2]
 
 quartz()
 ggplot(data = mergetsne.df, aes(mergetsne.1,  mergetsne.2, colour=Type, shape=Type))+
-+ geom_point(size=4)+
+  geom_point(size=4)+
   scale_color_manual(values=unique(conds_merged_colours[mergetsne.df$Type]))
