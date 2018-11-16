@@ -251,16 +251,27 @@ rawcounts = rawcounts[common_ids, ]
 #MERGE GTEX & TCGA MATRICES
 mergedcounts=cbind(gtex, rawcounts, deparse.level = 1)
 
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:20]='GTEX_Normal'
+colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
 
-conds_merged=c('gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','gtex_normal','Primary_Tumor','Primary_Tumor','Primary_Tumor','Primary_Tumor','Recurrent_Tumor', 'Recurrent_Tumor', 'Recurrent_Tumor', 'Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal', 'Solid_Tissue_Normal')
+#SHORT WAY
+conds_merged=as.factor(colnames(mergedcounts))
 conds_merged_colours=brewer.pal(length(unique(conds_merged)), 'Set1')
 names(conds_merged_colours)=unique(conds_merged)
 
+#LONG WAY
+conds_merged2=as.factor(c('GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal','Primary_Tumor','Primary_Tumor','Primary_Tumor','Primary_Tumor','Recurrent_Tumor', 'Recurrent_Tumor', 'Recurrent_Tumor', 'Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal','Solid_Tissue_Normal', 'Solid_Tissue_Normal'))
+ 
+conds_merged_colours2=brewer.pal(length(unique(conds_merged2)), 'Set1')
+names(conds_merged_colours2)=unique(conds_merged2)
+
 #Set up coldata table
-coldata=as.data.frame(conds_merged)
+coldata=as.data.frame(conds_merged2)
+colnames(coldata)='Sample_Type'
 
 #DESeq Object from merges counts matrix 'mergedcounts'
-mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~conds_merged)
+mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
 
 mergedds=estimateSizeFactors(mergeddsHTSeq)
 mergedds=estimateDispersions(mergedds)
@@ -275,34 +286,56 @@ mergerawcounts=counts(mergedds,normalized=FALSE)
 mergelog2counts=log2(mergenormcounts+1)
 
 quartz()
-barplot(colSums(counts(mergedds, normalized=FALSE)), col=conds_merged_colours[coldata$conds_merged], las=2,cex.names=0.5,main='Pre Normalised Counts')
-legend("topleft",levels((conds_merged)),cex=0.5,fill=conds_merged_colours[levels((conds_merged))])
+par(mfrow=c(1,2))
+barplot(colSums(counts(mergedds, normalized=FALSE)), col=conds_merged_colours2[coldata$Sample_Type], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topleft",levels(conds_merged2),cex=0.5,fill=conds_merged_colours2[levels(conds_merged2)])
+
+barplot(colSums(counts(mergedds, normalized=TRUE)), col=conds_merged_colours2[coldata$Sample_Type], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend("topleft",levels((conds_merged2)),cex=0.5,fill=conds_merged_colours2[levels((conds_merged2))])
+```
+
+#Alternative Normalisation?
+```{r}
+colnames(mergedcounts)[1:20]='GTEX_Normal'
+colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
+Type=factor(substring(colnames(mergedcounts),1,))
+
+#Time=factor(substring(colnames(mergedcounts),1,))#
+
+y=DGEList(counts = mergedcounts, group = Type)
+y=calcNormFactors(y)
 
 quartz()
-barplot(colSums(counts(mergedds, normalized=TRUE)), col=conds_merged_colours[coldata$conds_merged], las=2,cex.names=0.5,main='Post Normalised Counts')
-legend("topleft",levels((conds_merged)),cex=0.5,fill=conds_merged_colours[levels((conds_merged))])
+plotMDS(y, labels = colnames(mergedcounts), cex=0.4,)
+plotMDS(y, pch = 19, col= conds_merged_colours[conds_merged])
+#Need to add text
 ```
 
 #PCA Plots & Heatmaps
 ```{r}
+#Prcomp PCA
 mergepca=prcomp(t(assay(mergevsd)))
 quartz()
-plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$conds_merged], cex=1)
-text(mergepca$x, as.character(conds_merged), pos=1, cex=0.4)
+plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$Sample_Type], cex=1)
+text(mergepca$x, as.character(conds_merged2), pos=1, cex=0.4)
 
+summary(mergepca)
 
+#Princomp PCA
 mergepca2=princomp(assay(mergevsd))
-plot(mergepca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$conds_merged], cex=1)
-text(mergepca2$loadings, as.character(conds_merged), pos=1, cex=0.4)
+plot(mergepca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$Sample_Type], cex=1)
+text(mergepca2$loadings, as.character(conds_merged2), pos=1, cex=0.4)
+
+summary(mergepca2)
 
 quartz()
-heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$conds_merged, cexRow = 0.6, labCol = coldata$conds_merged, cexCol = 0.6, col=hmcol)
+heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol)
 
 set.seed(72)
 mergetsne = Rtsne(t(mergevstMat), perplexity = 3)
-mergetsne.df=data.frame(mergetsne.1=mergetsne$Y[,1], mergetsne.2=mergetsne$Y[,2], Type=as.factor(mergedds$conds_merged))
+mergetsne.df=data.frame(mergetsne.1=mergetsne$Y[,1], mergetsne.2=mergetsne$Y[,2], Type=as.factor(mergedds$Sample_Type))
 
 quartz()
 ggplot(data = mergetsne.df, aes(mergetsne.1,  mergetsne.2, colour=Type, shape=Type))+
   geom_point(size=4)+
-  scale_color_manual(values=unique(conds_merged_colours[mergetsne.df$Type]))
+  scale_color_manual(values=unique(conds_merged_colours2[mergetsne.df$Type]))
