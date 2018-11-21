@@ -16,6 +16,8 @@ library(DESeq2)
 library(Rtsne)
 library(pca3d)
 library(limma)
+library(genefilter)
+library(sva)
 ```
 
 ##Upload pdata (TCGA)
@@ -266,12 +268,17 @@ conds_merged2=as.factor(c('GTEX_Normal','GTEX_Normal','GTEX_Normal','GTEX_Normal
 conds_merged_colours2=brewer.pal(length(unique(conds_merged2)), 'Set1')
 names(conds_merged_colours2)=unique(conds_merged2)
 
+mergeddata=read.table('mergeddata.txt', header = T, row.names = 1)
+```
+
+#DESeq Object - Inlcuding Batch Effect
+```{r}
 #Set up coldata table
-coldata=as.data.frame(conds_merged2)
+coldata=mergeddata
 colnames(coldata)='Sample_Type'
 
 #DESeq Object from merges counts matrix 'mergedcounts'
-mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
+mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type + Batch)
 
 mergedds=estimateSizeFactors(mergeddsHTSeq)
 mergedds=estimateDispersions(mergedds)
@@ -294,21 +301,35 @@ barplot(colSums(counts(mergedds, normalized=TRUE)), col=conds_merged_colours2[co
 legend("topleft",levels((conds_merged2)),cex=0.5,fill=conds_merged_colours2[levels((conds_merged2))])
 ```
 
-#Alternative Normalisation?
+#Alternative Normalisation? - TMM
 ```{r}
 colnames(mergedcounts)[1:20]='GTEX_Normal'
 colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
-Type=factor(substring(colnames(mergedcounts),1,))
+Type=factor(substring(colnames(mergedcounts),1))
 
 #Time=factor(substring(colnames(mergedcounts),1,))#
 
 y=DGEList(counts = mergedcounts, group = Type)
 y=calcNormFactors(y)
 
+dge=DGEList(counts = mergedcounts)
+dge=calcNormFactors(dge, method = 'TMM')
+design=model.matrix(~0+mergeddata$Sample_Type+mergeddata$Batch)
+dge=estimateGLMCommonDisp(dge, design)
+dge=estimateTagwiseDisp(dge, design)
+fit = glmFit(dge, design)
+
 quartz()
-plotMDS(y, labels = colnames(mergedcounts), cex=0.4,)
+plotMDS(y, labels = colnames(mergedcounts), cex=0.4)
 plotMDS(y, pch = 19, col= conds_merged_colours[conds_merged])
 #Need to add text
+```
+
+#Alternative Normalisation? - SVA
+```{r}
+mod=model.matrix(~as.factor(mergeddata$Sample_Type), data = mergeddata)
+mod0=model.matrix(~1, data = mergeddata)
+svamerge=sva(mergedcounts, mod, mod0)
 ```
 
 #PCA Plots & Heatmaps
@@ -322,6 +343,7 @@ text(mergepca$x, as.character(conds_merged2), pos=1, cex=0.4)
 summary(mergepca)
 
 #Princomp PCA
+quartz()
 mergepca2=princomp(assay(mergevsd))
 plot(mergepca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$Sample_Type], cex=1)
 text(mergepca2$loadings, as.character(conds_merged2), pos=1, cex=0.4)
