@@ -254,6 +254,21 @@ rawcounts = rawcounts[common_ids, ]
 mergedcounts=cbind(gtex, rawcounts, deparse.level = 1)
 
 #Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex)]='GTEX_Normal'
+colnames(mergedcounts)[ncol(gtex)+1:ncol(rawcounts)]=paste(pdata$Sample_Type)
+
+#DIentify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+batch_colours = c("red","darkblue")
+
+names(cond_colours)=unique(conds)
+names(batch_colours)=unique(batch)
+
+```
+
+#OLD CODE
 colnames(mergedcounts)[1:20]='GTEX_Normal'
 colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
 
@@ -269,22 +284,48 @@ conds_merged_colours2=brewer.pal(length(unique(conds_merged2)), 'Set1')
 names(conds_merged_colours2)=unique(conds_merged2)
 
 mergeddata=read.table('mergeddata.txt', header = T, row.names = 1)
-```
+
 
 #DESeq Object - Inlcuding Batch Effect
 ```{r}
+
+#Create colData object fro DESeq
+coldata=as.data.frame(conds)
+#coldata$batch=batch
+colnames(coldata)=c("Sample_Type")
+mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
+
+```
+
 #Set up coldata table
 coldata=mergeddata
-colnames(coldata)='Sample_Type'
+colnames(coldata)=c('Sample_Type','Batch')
+
 
 #DESeq Object from merges counts matrix 'mergedcounts'
-mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type + Batch)
+```{r}
+mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
 
 mergedds=estimateSizeFactors(mergeddsHTSeq)
 mergedds=estimateDispersions(mergedds)
 
 ```
 
+#New fucntion created to test merged coutns matrix for non zero values
+```{r}
+nonzero <- function(val) {
+    return(val>=1)
+}
+
+#Test matrix created containing only nonzero gene counts based on above function
+testmatrix=mergedcounts[apply(mergedcounts,1,min) > 1,]
+
+#Plot to check there is ok distribution of gene counts after removing low gene counts
+quartz()
+plot(testmatrix[,1],testmatrix[,2])
+quartz()
+boxplot(log2(testmatrix+1))
+```
 #Data normalisation
 
 ```{r}
@@ -294,45 +335,50 @@ mergelog2counts=log2(mergenormcounts+1)
 
 quartz()
 par(mfrow=c(1,2))
-barplot(colSums(counts(mergedds, normalized=FALSE)), col=conds_merged_colours2[coldata$Sample_Type], las=2,cex.names=0.5,main='Pre Normalised Counts')
-legend("topleft",levels(conds_merged2),cex=0.5,fill=conds_merged_colours2[levels(conds_merged2)])
+barplot(colSums(counts(mergedds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
-barplot(colSums(counts(mergedds, normalized=TRUE)), col=conds_merged_colours2[coldata$Sample_Type], las=2,cex.names=0.5,main='Post Normalised Counts')
-legend("topleft",levels((conds_merged2)),cex=0.5,fill=conds_merged_colours2[levels((conds_merged2))])
+barplot(colSums(counts(mergedds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 ```
 
-#Alternative Normalisation? - TMM
-```{r}
-colnames(mergedcounts)[1:20]='GTEX_Normal'
-colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
-Type=factor(substring(colnames(mergedcounts),1))
 
-#Time=factor(substring(colnames(mergedcounts),1,))#
+#Alternative Normalisation? - TMM
+
+```{r}
+
+#Type=factor(substring(colnames(mergedcounts),1))
+#Time=factor(substring(colnames(mergedcounts),1,))
 
 y=DGEList(counts = mergedcounts, group = Type)
 y=calcNormFactors(y)
+
+quartz()
+plotMDS(y, labels = colnames(mergedcounts), cex=0.4)
+plotMDS(y, pch = 19, col= conds_merged_colours2[conds_merged2])
+#Need to add text
 
 dge=DGEList(counts = mergedcounts)
 dge=calcNormFactors(dge, method = 'TMM')
 design=model.matrix(~0+mergeddata$Sample_Type+mergeddata$Batch)
 dge=estimateGLMCommonDisp(dge, design)
-dge=estimateTagwiseDisp(dge, design)
+dge=estimateTagwiseDisp(dge)
 fit = glmFit(dge, design)
 
-quartz()
-plotMDS(y, labels = colnames(mergedcounts), cex=0.4)
-plotMDS(y, pch = 19, col= conds_merged_colours[conds_merged])
-#Need to add text
 ```
 
+
 #Alternative Normalisation? - SVA
+
 ```{r}
 mod=model.matrix(~as.factor(mergeddata$Sample_Type), data = mergeddata)
 mod0=model.matrix(~1, data = mergeddata)
 svamerge=sva(mergedcounts, mod, mod0)
 ```
 
+
 #PCA Plots & Heatmaps
+
 ```{r}
 #Prcomp PCA
 mergepca=prcomp(t(assay(mergevsd)))
