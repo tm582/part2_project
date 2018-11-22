@@ -18,7 +18,11 @@ library(pca3d)
 library(limma)
 library(genefilter)
 library(sva)
+library(edgeR)
+library(statmod)
 ```
+
+##TCGA DATA
 
 ##Upload pdata (TCGA)
 ```{r}
@@ -223,7 +227,7 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ##GTEX DATA
 
-## Load in GTEX Data
+## Load in GTEX Data - WORKING
 ```{r}
 
 gtex=readRDS("GTEX.rds")
@@ -248,7 +252,7 @@ gtex  = gtex[common_ids, ]
 rawcounts = rawcounts[common_ids, ] 
 ```
 
-#Merging GTEX Data with TCGA Data
+#Merging GTEX Data with TCGA Data - WORKING
 ```{r}
 #MERGE GTEX & TCGA MATRICES
 mergedcounts=cbind(gtex, rawcounts, deparse.level = 1)
@@ -286,23 +290,20 @@ names(conds_merged_colours2)=unique(conds_merged2)
 mergeddata=read.table('mergeddata.txt', header = T, row.names = 1)
 
 
+
 #DESeq Object - Inlcuding Batch Effect
 ```{r}
 
 #Create colData object fro DESeq
 coldata=as.data.frame(conds)
+coldata$batch=batch
+
 #coldata$batch=batch
-colnames(coldata)=c("Sample_Type")
-mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
+colnames(coldata)=c("Sample_Type", 'Batch')
 
 ```
 
-#Set up coldata table
-coldata=mergeddata
-colnames(coldata)=c('Sample_Type','Batch')
-
-
-#DESeq Object from merges counts matrix 'mergedcounts'
+#DESeq Object from merges counts matrix 'mergedcounts' EXCLUDING BATCH (Does not work)
 ```{r}
 mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
 
@@ -311,23 +312,7 @@ mergedds=estimateDispersions(mergedds)
 
 ```
 
-#New fucntion created to test merged coutns matrix for non zero values
-```{r}
-nonzero <- function(val) {
-    return(val>=1)
-}
-
-#Test matrix created containing only nonzero gene counts based on above function
-testmatrix=mergedcounts[apply(mergedcounts,1,min) > 1,]
-
-#Plot to check there is ok distribution of gene counts after removing low gene counts
-quartz()
-plot(testmatrix[,1],testmatrix[,2])
-quartz()
-boxplot(log2(testmatrix+1))
-```
 #Data normalisation
-
 ```{r}
 mergenormcounts <- counts(mergedds, normalized=TRUE)
 mergerawcounts=counts(mergedds,normalized=FALSE)
@@ -340,41 +325,222 @@ legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
 barplot(colSums(counts(mergedds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts')
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
 ```
 
 
-#Alternative Normalisation? - TMM
 
+
+
+
+NEW APPROACH TAKEN FROM HERE - Decided that expression levels in TCGA are too low to directly compare with GTEX and DESeq is insufficient to normalise. Alternative normalisation appraoches taken
+
+A new matrix (testmatrix) is created excluding coutns that are very low - reduces the number of genes)
+
+#TEST WITH NON ZERO GENE COUNTS
+#New fucntion created to test merged coutns matrix for non zero values
+```{r}
+nonzero <- function(val) {
+    return(val>=1)
+}
+
+#Test matrix created containing only nonzero gene counts based on above function
+testmatrix=mergedcounts[apply(mergedcounts,1,min) > 1,]
+```
+
+
+#DESeq nromalisation - not including batch effects
+Basic code used in all appraoches outlined below
+```{r}
+testHTSeq<-DESeqDataSetFromMatrix(countData=testmatrix,colData=coldata,design=~Sample_Type)
+
+testdds=estimateSizeFactors(testHTSeq)
+testdds=estimateDispersions(testdds)
+
+testnormcounts <- counts(testdds, normalized=TRUE)
+testrawcounts=counts(testdds,normalized=FALSE)
+testlog2counts=log2(testnormcounts+1)
+
+quartz()
+par(mfrow=c(1,2))
+barplot(colSums(counts(testdds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+barplot(colSums(counts(testdds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+#Plot to check there is ok distribution of gene counts after removing low gene counts
+quartz()
+plot(testmatrix[,1],testmatrix[,2])
+quartz()
+boxplot(log2(testmatrix+1))
+
+#Normalisation & Dispersion Plot
+dds=nbinomWaldTest(testdds)
+test_counts=counts(testdds, normalized=TRUE)
+
+quartz()
+plotDispEsts(testdds,main='Dispersion Plot')
+
+#VSD
+testvsd <- varianceStabilizingTransformation(testdds)
+testvstMat <- assay(testvsd)
+testvstcounts <- testvstMat[order(apply(testvstMat,1,sum),decreasing =TRUE),]
+testpca=prcomp(t(assay(testvsd)))
+
+```
+
+The normalisation is generally poor using DESeq functions
+Decided to look at other normalisation options to see whether we can compare the GTEX TCGA batch effect
+
+
+#2 - normal DESeq Normalisation and Analysis using test DESeq objects above
+
+```{r}
+#VSD
+testvsd <- varianceStabilizingTransformation(testdds)
+testvstMat <- assay(testvsd)
+testvstcounts <- testvstMat[order(apply(testvstMat,1,sum),decreasing =TRUE),]
+
+#PCA Plot
+testpca=prcomp(t(assay(testvsd)))
+
+quartz()
+plot(testpca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
+text(testpca$x, as.character(conds), pos=1, cex=0.4)
+
+summary(testpca)
+
+#Heatmap
+quartz()
+heatmap.2(cor(test_counts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol)
+
+#Rtsne
+set.seed(72)
+testtsne = Rtsne(t(testvstMat), perplexity = 3, check_duplicates=F)
+testtsne.df=data.frame(testtsne.1=testtsne$Y[,1], testtsne.2=testtsne$Y[,2], Type=as.factor(testdds$Sample_Type))
+
+quartz()
+ggplot(data = testtsne.df, aes(testtsne.1, testtsne.2, colour=Type, shape=Type))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[testtsne.df$Type]))
+```
+
+
+#APPROACH 3 - limma batch correction for data
+This attempts to remove Batch effects between GTEX and TCGA
+```{r}
+
+#Limma function removal of batch effect
+assay(testvsd)=limma::removeBatchEffect(assay(testvsd), testvsd$batch)
+quartz()
+plotPCA(testvsd, 'batch')
+
+assay(testvsd)=limma::removeBatchEffect(assay(testvsd), testvsd$Sample_Type)
+quartz()
+plotPCA(testvsd, 'Sample_Type')
+
+
+testvsd <- varianceStabilizingTransformation(testdds)
+testvstMat <- assay(testvsd)
+testvstcounts <- testvstMat[order(apply(testvstMat,1,sum),decreasing =TRUE),]
+
+filter1=function(x)(IQR(x)>0.5)
+
+filteredcounts=testvstcounts[genefilter(testvstcounts,filter1),]
+
+pca=prcomp(t(filteredcounts))
+plot(pca)
+
+quartz()
+plot(pca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
+text(pca$x, as.character(conds), pos=1, cex=0.4)
+
+```
+
+#APPROACH 4 - TMM
 ```{r}
 
 #Type=factor(substring(colnames(mergedcounts),1))
 #Time=factor(substring(colnames(mergedcounts),1,))
 
-y=DGEList(counts = mergedcounts, group = Type)
-y=calcNormFactors(y)
+dge=DGEList(counts=testmatrix)
+
+dge$samples$Type=conds
+dge$samples$Batch=batch
+
+dge=calcNormFactors(dge, method = 'TMM')
 
 quartz()
-plotMDS(y, labels = colnames(mergedcounts), cex=0.4)
-plotMDS(y, pch = 19, col= conds_merged_colours2[conds_merged2])
-#Need to add text
+boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main='log2 counts', cex.axis=0.6)
 
-dge=DGEList(counts = mergedcounts)
-dge=calcNormFactors(dge, method = 'TMM')
-design=model.matrix(~0+mergeddata$Sample_Type+mergeddata$Batch)
-dge=estimateGLMCommonDisp(dge, design)
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Doesn't currrently include batch - when batch is added omits GTEX batch
+design=model.matrix(~0+batch, data = dge$samples)
+rownames(design)=colnames(dge)
+
+dge=estimateDisp(dge, design, robust=T)
+dge$common.dispersion
+quartz()
+plotBCV(dge)
+
+dge=estimateGLMCommonDisp(dge)
 dge=estimateTagwiseDisp(dge)
-fit = glmFit(dge, design)
+fit = glmFit(dge, design, robust = T)
+quartz()
 
+fit2=glmQLFit(dge, design)
+#Compare GTEX normal to Primary Tumour (2), Recurrent Tumour (3), Solid 
+qlf=glmQLFTest(fit2, coef = 2)
+qlf=glmQLFTest(fit2, coef = 3)
+qlf=glmQLFTest(fit2, coef = 4)
 ```
 
 
 #Alternative Normalisation? - SVA
 
 ```{r}
-mod=model.matrix(~as.factor(mergeddata$Sample_Type), data = mergeddata)
-mod0=model.matrix(~1, data = mergeddata)
-svamerge=sva(mergedcounts, mod, mod0)
+mod=model.matrix(~as.factor(conds), data = testmatrix)
+mod0=model.matrix(~as.factor(batch), data = testmatrix)
+sva=sva(test_counts, mod, mod0)
+
+#Adjusting for Surrogate Variables
+pValues=f.pvalue(test_counts,mod,mod0)
+qValues=p.adjust(pValues, method='BH')
+
+modSv = cbind(mod,sva$sv)
+mod0Sv = cbind(mod0,sva$sv)
+pValuesSv = f.pvalue(test_counts,modSv,mod0Sv)
+qValuesSv = p.adjust(pValuesSv,method="BH")
+
+#ComBat Function to adjust for batch effect between GTEX and TCGA - TO RETURN TO
+batch
+modcombat=model.matrix(~1, data = testmatrix)
+combat_test=ComBat(dat = test_counts, batch = batch, mod=modcombat,par.prior=TRUE, prior.plots=FALSE)
+
+#Simplified ComBat approach - TO RETURN TO 
+modBatch=model.matrix(~as.factor(conds) + as.factor(batch), data = testmatrix)
+mod0Batch=model.matrix(~as.factor(batch), data = testmatrix)
+
+pValuesBatch = f.pvalue(test_counts,modBatch,mod0Batch)
+qValuesBatch = p.adjust(pValuesBatch,method="BH")
+
+#sva for sequencing
+mod1=model.matrix(~conds)
+modnull=cbind(mod1[,1])
+svseq=svaseq(test_counts, mod1, modnull)$sv
+
+plot(svseq, pch=19, col=cond_colours[conds])
 ```
+
+
+
+
+
 
 
 #PCA Plots & Heatmaps
@@ -383,8 +549,8 @@ svamerge=sva(mergedcounts, mod, mod0)
 #Prcomp PCA
 mergepca=prcomp(t(assay(mergevsd)))
 quartz()
-plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=conds_merged_colours[coldata$Sample_Type], cex=1)
-text(mergepca$x, as.character(conds_merged2), pos=1, cex=0.4)
+plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
+text(mergepca$x, as.character(conds), pos=1, cex=0.4)
 
 summary(mergepca)
 
