@@ -56,6 +56,8 @@ colnames(gene_names)=c("GeneName","Source","BioType")
 
 #colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
+dds=estimateSizeFactors(ddsHTSeq)
+dds=estimateDispersions(dds)
 ```
 
 ##Data Normalisation
@@ -89,12 +91,14 @@ quartz()
 plotDispEsts(dds,main='Dispersion Plot')
 ```
 
+
 ##Variance Stabilising Transformation
 ```{r}
 vsd <- varianceStabilizingTransformation(dds)
 vstMat <- assay(vsd)
 vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 ```
+
 
 #PCA Plots & Heatmaps
 PCA plots shows good separation between tumour tissues and solid normals. One primary tumour point appears to be anomalous whilst another closer to recurrent tumour tissue type.
@@ -117,6 +121,7 @@ hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
 quartz()
 heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts')
 ```
+
 
 ##Rtsne
 tsne shows good separation between all tisuse types. Anomalous primary tumour point is less apparent in the tsne plot. One primary tumour point reamins closely grouped with recurrent tumours.
@@ -213,34 +218,13 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 ```
 
 
-##Save Plots in PDF for TCGA Analysis
-```{r}
-par(mfrow=c(1,2))
-
-barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts', names.arg =conds)
-legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
-
-barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts', names.arg =conds)
-legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
-
-plotDispEsts(dds,main='Dispersion Plot')
-
-plot(pca$x, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours[conds],cex=1)
-text(pca$x, as.character(conds), pos=1, cex=0.4)
-
-pca3d(pca, group=conds, col=cond_colours, legend = 'bottomright')
-pca2d(pca, group=conds, col=cond_colours, legend='bottomright')
-
-heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts')
-
-```
-
-
 
 
 
 
 ##GTEX DATA
+
+##DESeq Analysis
 
 ## Load in GTEX Data
 ```{r}
@@ -269,6 +253,7 @@ common_ids = intersect(rownames(gtex),rownames(rawcounts))
 gtex  = gtex[common_ids, ]
 gtex = gtex[,1:20]
 rawcounts = rawcounts[common_ids, ] 
+
 ```
 
 #Merging GTEX Data with TCGA Data
@@ -292,6 +277,9 @@ names(batch_colours)=unique(batch)
 ```
 
 
+
+##DESeq Analysis
+
 #ColData object produced - Inlcuding Batch Effect
 ```{r}
 
@@ -303,6 +291,7 @@ colnames(coldata)=c("Sample_Type", 'Batch')
 
 ```
 
+
 #DESeq Object from merged counts matrix 'mergedcounts' EXCLUDING BATCH
 ```{r}
 mergeddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type+Batch)
@@ -311,6 +300,7 @@ mergedds=estimateSizeFactors(mergeddsHTSeq)
 mergedds=estimateDispersions(mergedds)
 
 ```
+
 
 #Data normalisation - Using merged data
 ```{r}
@@ -348,30 +338,26 @@ mergevsd <- varianceStabilizingTransformation(mergedds, blind = F)
 mergevstMat <- assay(mergevsd)
 mergevstcounts <- mergevstMat[order(apply(mergevstMat,1,sum),decreasing =TRUE),]
 
+quartz()
+heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol)
+
 ```
 
 
 #PCA Plots & Heatmaps - merged data
 ```{r}
 #Prcomp PCA
-pca=prcomp(t(assay(mergevsd)))
+mergepca=prcomp(t(assay(mergevsd)))
 quartz()
-plot(pca$x, main='PCA Variance Stabilised for Merged Data', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
-text(pca$x, as.character(conds), pos=1, cex=0.4)
+plot(mergepca$x, main='PCA Variance Stabilised for Merged Data', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
+text(mergepca$x, as.character(conds), pos=1, cex=0.4)
 
-summary(pca)
+summary(mergepca)
 
-#Princomp PCA
-pca2=princomp(assay(vsd))
-quartz()
-plot(pca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
-text(pca2$loadings, as.character(conds), pos=1, cex=0.4)
+```
 
-summary(pca2)
-
-quartz()
-heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol)
-
+#Rtsne
+```{r}
 set.seed(72)
 tsne = Rtsne(t(mergevstMat), perplexity = 3)
 tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(mergedds$Sample_Type), Batch=as.factor(mergedds$Batch))
@@ -455,9 +441,14 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 ```
 
 
+
+
+
 ##Voom Limma Approach - Using Si's code
 
-#Set-Up
+
+##Edge R Analysis
+#Set-Up DGE Object and initial organisation
 ```{r}
 
 dge=DGEList(counts=mergedcounts)
@@ -476,20 +467,23 @@ dge=calcNormFactors(dge, method='TMM')
 dge$samples$norm.factors
 
 quartz()
+par(mfrow=c(1,2))
 boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main="Pre Normalised Data", ylab="Log-cpm")
+
+lcpm=cpm(dge, log=T)
+
+boxplot(lcpm, las=2, col=cond_colours[conds], main="Normalised Data",ylab="Log-cpm")
 
 quartz()
 plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
 legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
-
-lcpm=cpm(dge, log=T)
-quartz()
-boxplot(lcpm, las=2, col=cond_colours[conds], main="Normalised Data",ylab="Log-cpm")
 ```
 
 
 #Design only include conditions
 ```{r}
+
+#Design
 design=model.matrix(~0+conds)
 contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, condsRecurrent_Tumor-condsNormal, levels = colnames(design))
 
@@ -501,21 +495,32 @@ vfit=contrasts.fit(vfit, contrasts = contr.matrix)
 efit=eBayes(vfit)
 contrast1=efit
 
+
+#PCA
 pca=prcomp(t(v$E))
+
 quartz()
-plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, title(main = 'PCA Plot'))
+plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1)
   text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
   text(pca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
 
+
+#SA Plot
 quartz()
 plotSA(efit, main='Mean-Variance Trend')
 
-quartz()
-plotMDS(efit, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
-  legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
 
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+  legend('bottomleft', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+  
+#Summary
 summary(decideTests(efit))
 
+
+#Volcano Plot
 quartz()
 volcanoplot(efit, coef=1,names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='Primary Tumour vs. Normal')
   abline(h=-log10(0.05), lty=3, col='red')
@@ -529,6 +534,7 @@ volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), high
   abline(v=1, lty=3, col='red')
   
 
+#Further Analysis
 tfit = treat(vfit, lfc=1)
 dt = decideTests(tfit)
 
@@ -547,13 +553,90 @@ v=voom(dge, design, plot = T)
 
 vfit=lmFit(v, design)
 vfit=contrasts.fit(vfit, contrasts = contr.matrix)
-efit=eBayes(vfit) #Does trend=1 need to be added here?
+efit=eBayes(vfit)
 contrast2=efit
+
+#PCA Plot
+voompca=prcomp(t(v$E))
+
+quartz()
+plot(voompca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1)
+text(voompca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+text(voompca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+
+#Volcano Plots
+quartz()
+volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Primary Tumour vs. Normal')
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
+  
+quartz()
+volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Recurrent Tumour vs. Normal') 
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
+
+  
+#Butterfly Plot - To compare how much the comparisons are similar/agree with eachother
+quartz()
+plot(topTable(efit,coef=1,number=10000000000)$logFC,topTable(efit,coef=2,number=100000000000)$logFC)
+  abline(h=0)
+  abline(v=0)
+  abline(a=0,b=1, lty=3, col='red')
+
+
+#Further Analysis
+tfit = treat(vfit, lfc=1)
+dt = decideTests(tfit)
+summary(dt)
+
+```
+
+
+#Compare Primary Tumour & Recurrent Tumour to TCGA Normals and to GTEX Normals Separately
+```{r}
+
+#Readjust Conditions Vectors to distinguish between GTEX and TCGA Normals - This will allow us to compare effect of     comparing each individually
+conds_origin=as.character(conds)
+conds_origin[1:20]=rep("Normal_GTEX",20)
+conds_origin[28:32]=rep("Normal_TCGA",5)
+conds_origin=as.factor(conds_origin)
+
+
+#Design changes to refelct changes in conds > conds_origin
+design=model.matrix(~0+conds_origin+batch)
+contr.matrix=makeContrasts(conds_originPrimary_Tumor-conds_originNormal_TCGA, conds_originPrimary_Tumor-conds_originNormal_GTEX, conds_originRecurrent_Tumor - conds_originNormal_TCGA, conds_originRecurrent_Tumor-conds_originNormal_GTEX, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+contrast3=efit
+
 
 #PCA Plot
 pca=prcomp(t(v$E))
 quartz()
-plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, title(main = 'PCA Plot'))
+plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds_origin], cex=1, title(main = 'PCA Plot'))
 text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
 text(pca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
 
@@ -565,158 +648,265 @@ plotSA(efit, main='Mean-Variance Trend')
 
 #MDS Plot
 quartz()
-plotMDS(efit, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+plotMDS(efit, pch = 19, col= cond_colours[conds_origin], main='Multi Dimensional Scaling (MDS) Plot')
 legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
 
 
 #Summary of findings from comparisons
 summary(decideTests(efit))
 
-
-#Volcano Plots
-quartz()
-volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='Primary Tumour vs. Normal')
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
-  
-quartz()
-volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='Recurrent Tumour vs. Normal') 
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
-
-  
-#Butterfly Plot - To compare how much the comparisons are similar/agree with eachother
-plot(topTable(efit,coef=1,number=10000000000)$logFC,topTable(efit,coef=2,number=100000000000)$logFC)
-  abline(h=0)
-  abline(v=0)
-  abline(a=0,b=1, lty=3, col='red')
-
-
-#Further Analysis
-tfit = treat(vfit, lfc=1)
-dt = decideTests(tfit)
-summary(dt)
-```
-
-#Compare Primary Tumour to TCGA Normals and to GTEX Normals Separately
-```{r}
-#Readjust Conditions Vectors to distinguish between GTEX and TCGA Normals - This will allow us to compare effect of comparing each individually
-conds_origin=as.character(conds)
-conds_origin[1:20]=rep("Normal_GTEX",20)
-conds_origin[28:32]=rep("Normal_TCGA",5)
-conds_origin=as.factor(conds_origin)
-
-#Design changes to refelct changes in conds > conds_origin
-design=model.matrix(~0+conds_origin+batch)
-contr.matrix=makeContrasts(conds_originPrimary_Tumor-conds_originNormal_TCGA, conds_originPrimary_Tumor-conds_originNormal_GTEX, conds_originNormal_TCGA-conds_originNormal_GTEX, levels = colnames(design))
-
 #Plot similarities between comparisons
-plot(toptable(efit,coef=1,number=1000000000000000)$logFC,toptable(efit,coef=2,number=1000000000000000)$logFC)
+plot(topTable(efit,coef=1,number=1000000000000000)$logFC,topTable(efit,coef=2,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. TCGA & GTEX Normals'))
+abline(h=0)
+abline(v=0)
+abline(a=0,b=1, lty=1, col='red')
+
+plot(topTable(efit,coef=3,number=1000000000000000)$logFC,topTable(efit,coef=4,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. TCGA & GTEX Normals'))
 abline(h=0)
 abline(v=0)
 abline(a=0,b=1, lty=1, col='red')
 ```
 
 
-#Comparing normals with eachother
+
+
+---------------------------------------------------------
+---------------------------------------------------------
+
+
+
+##SVA Analysis
 ```{r}
 
-design=model.matrix(~0+conds_origin+batch)
-contr.matrix=makeContrasts(conds_originNormal_TCGA-conds_originNormal_GTEX, levels = colnames(design))
+#Starting from merged counts matrix
+#Convert to DESeq object
+dds=DESeqDataSetFromMatrix(mergedcounts, colData=coldata, design = ~Sample_Type + Batch)
+
+
+#Remove low counts
+nrow(dds)
+dds=dds[rowSums(counts(dds))>1,]
+nrow(dds)
+
+
+#rlog transformation
+rlt=rlog(dds, blind=F)
+
+
+dds=DESeq(dds)
 
 
 quartz()
-volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='TCGA Normal vs. GTEX Normal')
+par(mfrow=c(1,2))
+plot(log2(counts(dds, normalized=TRUE)+ 1), pch=16, cex=0.3, main = 'Log2 Normalised Counts')
+plot(assay(rlt), pch=16, cex=0.3, main='rlog Normalised Counts')
+
+
+#Sample Distances - rlog
+sampleDists=dist(t(assay(rlt)))
+sampleDistMatrix <- as.matrix(sampleDists)
+
+quartz()
+heatmap.2(sampleDistMatrix, cexRow = 0.5, cexCol = 0.5, col = hmcol, trace = 'none', main = 'Sample-to-Sample Distances Using Rlog Values')
+
+
+#PCA Plot
+pca=prcomp(t(assay(rlt)))
+quartz()
+plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], main='PCA Plot: rlog values')
+  text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+  text(pca$x,as.character(coldata$Sample_Type),cex=0.3,pos = 3)
+  
+summary(pca)
+
+#MDS Plot
+mdsData=data.frame(cmdscale(sampleDistMatrix))
+mds=cbind(mdsData, as.data.frame(colData(rlt)))
+
+quartz()
+ggplot(mds, aes(X1,X2,color=Sample_Type,shape=Batch))+
+  geom_point(size=3)+ 
+  ggtitle('MDS Plot')+
+  scale_color_manual(values=unique(cond_colours[mds$Sample_Type]))
+
+#Differential Expression Analysis
+dds=DESeq(dds)
+
+res=results(dds)
+summary(res)
+
+#Lower False Discovery Rate
+#res.05 <- results(dds, alpha=.05) 
+#table(res.05$padj < .05)
+
+#Raise LFC Threshold
+#resLFC1 <- results(dds, lfcThreshold=1) 
+#table(resLFC1$padj < 0.1)
+
+sum(res$pvalue < 0.05, na.rm=TRUE)
+sum(!is.na(res$pvalue))
+
+sum(res$padj < 0.1, na.rm=TRUE)
+
+res=res[order(res$padj),]
+
+#Visualising top gene count distribution
+topGene=rownames(res)[which.min(res$padj)]
+
+quartz()
+plotCounts(dds, gene=topGene, intgroup=c("Sample_Type"))
+
+
+topVarGenes=head(order(rowVars(assay(rlt)),decreasing=T), 50)
+mat <- assay(rlt)[ topVarGenes, ]
+mat <- mat - rowMeans(mat)
+
+df <- as.data.frame(colData(rlt)[,c("Batch","Sample_Type")])
+
+heatmap.2(mat, trace='none', cexRow = 0.5, cexCol = 0.5, col=hmcol)
+heatmap.2(assay(rlt)[rownames(res[1:50,]),],col=hmcol,trace="none",cexRow = 0.5,cexCol = 0.5)
+
+          
+#Removing hidden batch effects
+dat=counts(dds,normalized=T)
+idx=rowMeans(dat)>1
+dat=dat[idx,]
+
+mod=model.matrix(~Sample_Type, colData(dds))
+mod0=model.matrix(~1, colData(dds))
+
+#Is n.sv=2 correct?
+svseq=svaseq(dat, mod, mod0,n.sv=2)
+
+quartz()
+par(mfrow=c(2,1),mar=c(3,5,3,1))
+
+stripchart(svseq$sv[,1] ~ dds$Batch,vertical=TRUE,main="SV1")
+abline(h=0)
+
+stripchart(svseq$sv[,2] ~ dds$Batch,vertical=TRUE,main="SV2")
+abline(h=0)
+
+ddssva = dds
+ddssva$SV1= svseq$sv[,1] 
+ddssva$SV2= svseq$sv[,2] 
+design(ddssva)= ~ SV1 + SV2 + Sample_Type
+
+ddssva <- DESeq(ddssva)
+
+```
+
+
+#Data normalisation - SVA
+```{r}
+mergenormcounts <- counts(ddssva, normalized=TRUE)
+mergerawcounts=counts(ddssva,normalized=FALSE)
+mergelog2counts=log2(mergenormcounts+1)
+
+quartz()
+par(mfrow=c(1,2))
+
+barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+```
+
+
+#PCA Plots & Heatmaps - SVA
+```{r}
+#Prcomp PCA
+pca=prcomp(t(assay(ddssva)))
+quartz()
+plot(pca$x, main='PCA Variance Stabilised for Merged Data', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
+text(pca$x, as.character(conds), pos=1, cex=0.4)
+
+summary(pca)
+
+```
+
+#Rtsne SVA
+```{r}
+set.seed(72)
+tsne = Rtsne(t(assay(ddssva)), perplexity = 3)
+tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(ddssva$Sample_Type), Batch=as.factor(ddssva$Batch))
+
+quartz()
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
+```
+
+
+#Statistical Analysis - SVA
+
+```{r}
+p_threshold=0.05
+lfc_threshold=0.7
+max_display_hits=100
+
+condition_list=levels(conds)
+
+for (i in 2:(length(condition_list))){
+ 
+  normal=condition_list[1]
+  compare=condition_list[i]
+
+  print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
+  
+  res=results(ddssva, contrast = c('Sample_Type', normal, compare))
+  res=res[order(res$padj),]
+  
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+   print(paste("Found: ",length(hits)," Statistical hits"))
+   
+  if (length(hits) != 0){
+    if (length(hits)>max_display_hits){
+      hits=hits[1:max_display_hits]
+    }
+    
+  quartz()
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEX/TCGA Merged)'), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
   abline(h=-log10(0.05), lty=3, col='red')
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
+
+  } else {
+    print(paste("No Results for ",compare))
+  }
   
-  
+}
+
+zz=counts(ddssva,normalized=T)[rownames(res[1:50,]),]
+quartz()
+heatmap.2(log2(zz+1),col=hmcol,trace="none")
 ```
 
 
----------------------------------------------------------
----------------------------------------------------------
-
-
-#Alternative Normalisation? - SVA
+#Medians - SVA 
 ```{r}
-#Need to create pdata-esque file for SVA
-pdata=coldata
 
-mod=model.matrix(~as.factor(conds), data = mergedcounts)
-mod0=model.matrix(~1, data = pdata)
-nsv=num.sv(rawcounts, mod, method = 'leek')
-sva=sva(rawcounts, mod, mod0)
-
-#Adjusting for Surrogate Variables
-pValues=f.pvalue(test_counts,mod,mod0)
-qValues=p.adjust(pValues, method='BH')
-
-modSv = cbind(mod,sva$sv)
-mod0Sv = cbind(mod0,sva$sv)
-pValuesSv = f.pvalue(test_counts,modSv,mod0Sv)
-qValuesSv = p.adjust(pValuesSv,method="BH")
-
-#ComBat Function to adjust for batch effect between GTEX and TCGA - TO RETURN TO
-batch
-modcombat=model.matrix(~1, data = testmatrix)
-combat_test=ComBat(dat = test_counts, batch = batch, mod=modcombat,par.prior=TRUE, prior.plots=FALSE)
-
-#Simplified ComBat approach - TO RETURN TO 
-modBatch=model.matrix(~as.factor(conds) + as.factor(batch), data = testmatrix)
-mod0Batch=model.matrix(~as.factor(batch), data = testmatrix)
-
-pValuesBatch = f.pvalue(test_counts,modBatch,mod0Batch)
-qValuesBatch = p.adjust(pValuesBatch,method="BH")
-
-#sva for sequencing
-mod1=model.matrix(~conds)
-modnull=cbind(mod1[,1])
-svseq=svaseq(test_counts, mod1, modnull)$sv
-
-plot(svseq, pch=19, col=cond_colours[conds])
-
-Old TMM Normalisation Code
-
-Type=factor(substring(colnames(mergedcounts),1))
-Time=factor(substring(colnames(mergedcounts),1,))
-
-dge=DGEList(counts=mergedcounts)
-
-dge$samples$Type=conds
-dge$samples$Batch=batch
-
-dge=calcNormFactors(dge, method = 'TMM')
+median.primary=apply(mergevstMat[,21:24],1,median)
+median.recurrent=apply(mergevstMat[,25:27],1,median)
+median.normal=apply(mergevstMat[,c(1:20, 28:32)], 1, median)
 
 quartz()
-boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main='log2 counts', cex.axis=0.6)
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 quartz()
-plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
-legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
-
-design=model.matrix(~conds+batch, data = dge$samples)
-rownames(design)=colnames(dge)
-
-dge=estimateDisp(dge, design, robust=T)
-dge$common.dispersion
-quartz()
-plotBCV(dge)
-
-dge=estimateGLMCommonDisp(dge)
-dge=estimateTagwiseDisp(dge)
-fit = glmFit(dge, design, robust = T)
-
-quartz()
-
-fit2=glmQLFit(dge, design)
-Compare GTEX normal to Primary Tumour (2), Recurrent Tumour (3), Solid 
-qlf=glmQLFTest(fit2, coef = 2)
-qlf=glmQLFTest(fit2, coef = 3)
-qlf=glmQLFTest(fit2, coef = 4)
 ```
+
 

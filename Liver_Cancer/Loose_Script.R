@@ -1,5 +1,93 @@
 
-#Old data labelling
+##Save Plots in PDF for TCGA Analysis
+
+pdf('TCGA_Data_Plots.pdf', paper = 'a4')
+
+barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts', names.arg =conds)
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
+
+barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts', names.arg =conds)
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
+
+
+plotDispEsts(dds,main='Dispersion Plot')
+
+
+plot(pca$x, main='PCA Variance Stabilised', pch=21, col='black', bg=cond_colours[conds],cex=1)
+text(pca$x, as.character(conds), pos=1, cex=0.4)
+
+
+pca2d(pca, group=conds, col=cond_colours, legend='bottomright')
+
+
+heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts')
+
+
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
+
+for (i in 2:(length(condition_list))){
+  
+  normal=condition_list[1]
+  compare=condition_list[i]
+  
+  print(paste('Comparing', normal, 'vs.', compare))
+  
+  res=results(dds, contrast = c('Sample_Type', normal, compare))
+  res=res[order(res$padj),]
+  
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+  print(paste("Found: ",length(hits)," Statistical hits"))
+  
+  if (length(hits) != 0){
+    if (length(hits)>max_display_hits){
+      hits=hits[1:max_display_hits]
+    }
+    
+    plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
+    points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+    text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
+    abline(h=-log10(0.05), lty=3, col='red')
+    abline(v=-1, lty=3, col='red')
+    abline(v=1, lty=3, col='red')
+    
+    heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  } else {
+    print(paste("No Results for ",compare))
+  }
+  
+}
+
+
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
+
+plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
+dev.off()
+
+--------------------------------------
+  
+#Princomp PCA
+pca2=princomp(assay(vsd))
+quartz()
+plot(pca2$loadings, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
+text(pca2$loadings, as.character(conds), pos=1, cex=0.4)
+
+summary(pca2)
+
+
+--------------------------------------
+
+##Old data labelling
 #OLD CODE
 colnames(mergedcounts)[1:20]='GTEX_Normal'
 colnames(mergedcounts)[21:32]=paste(pdata$Sample_Type)
@@ -143,3 +231,84 @@ plot(pca, type='l')
 quartz()
 plot(pca$x, main='PCA Variance Stabilised for Merged Data', pch=21, col='black', bg=cond_colours[conds], cex=1)
 text(pca$x, as.character(conds), pos=1, cex=0.4)
+
+-------------------------------------------------
+  
+#SVA Normalisation
+  
+#Need to create pdata-esque file for SVA
+pdata=coldata
+
+mod=model.matrix(~as.factor(conds), data = mergedcounts)
+mod0=model.matrix(~1, data = pdata)
+nsv=num.sv(rawcounts, mod, method = 'leek')
+sva=sva(rawcounts, mod, mod0)
+
+#Adjusting for Surrogate Variables
+pValues=f.pvalue(test_counts,mod,mod0)
+qValues=p.adjust(pValues, method='BH')
+
+modSv = cbind(mod,sva$sv)
+mod0Sv = cbind(mod0,sva$sv)
+pValuesSv = f.pvalue(test_counts,modSv,mod0Sv)
+qValuesSv = p.adjust(pValuesSv,method="BH")
+
+#ComBat Function to adjust for batch effect between GTEX and TCGA - TO RETURN TO
+batch
+modcombat=model.matrix(~1, data = testmatrix)
+combat_test=ComBat(dat = test_counts, batch = batch, mod=modcombat,par.prior=TRUE, prior.plots=FALSE)
+
+#Simplified ComBat approach - TO RETURN TO 
+modBatch=model.matrix(~as.factor(conds) + as.factor(batch), data = testmatrix)
+mod0Batch=model.matrix(~as.factor(batch), data = testmatrix)
+
+pValuesBatch = f.pvalue(test_counts,modBatch,mod0Batch)
+qValuesBatch = p.adjust(pValuesBatch,method="BH")
+
+#sva for sequencing
+mod1=model.matrix(~conds)
+modnull=cbind(mod1[,1])
+svseq=svaseq(test_counts, mod1, modnull)$sv
+
+plot(svseq, pch=19, col=cond_colours[conds])
+
+Old TMM Normalisation Code
+
+Type=factor(substring(colnames(mergedcounts),1))
+Time=factor(substring(colnames(mergedcounts),1,))
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$Type=conds
+dge$samples$Batch=batch
+
+dge=calcNormFactors(dge, method = 'TMM')
+
+quartz()
+boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main='log2 counts', cex.axis=0.6)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+design=model.matrix(~conds+batch, data = dge$samples)
+rownames(design)=colnames(dge)
+
+dge=estimateDisp(dge, design, robust=T)
+dge$common.dispersion
+quartz()
+plotBCV(dge)
+
+dge=estimateGLMCommonDisp(dge)
+dge=estimateTagwiseDisp(dge)
+fit = glmFit(dge, design, robust = T)
+
+quartz()
+
+fit2=glmQLFit(dge, design)
+Compare GTEX normal to Primary Tumour (2), Recurrent Tumour (3), Solid 
+qlf=glmQLFTest(fit2, coef = 2)
+qlf=glmQLFTest(fit2, coef = 3)
+qlf=glmQLFTest(fit2, coef = 4)
+
