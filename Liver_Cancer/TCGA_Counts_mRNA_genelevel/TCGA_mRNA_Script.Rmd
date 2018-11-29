@@ -24,13 +24,13 @@ library(statmod)
 
 ##TCGA DATA
 
-##Upload pdata (TCGA)
+#Upload pdata (TCGA)
 ```{r}
 pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
 ```
 
-##Set Conditions/Sample Types
+#Set Conditions/Sample Types
 There are 3 levels: Primary Tumour, Recurrent Tumour and Normal Tissue
 ```{r}
 conds=(pdata$Sample_Type)
@@ -38,7 +38,7 @@ cond_colours=brewer.pal(length(unique(conds)), 'Set1')
 names(cond_colours)=unique(conds)
 ```
 
-##Read in count data
+#Read in count data
 Data taken from TCGA data repository - Liver Cancer mRNA
 datatype=HTSeq count data
 ```{r}
@@ -60,7 +60,7 @@ dds=estimateSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
 ```
 
-##Data Normalisation
+#Data Normalisation
 ```{r}
 normcounts <- counts(dds, normalized=TRUE)
 rawcounts=counts(dds,normalized=FALSE)
@@ -68,7 +68,7 @@ log2counts=log2(normcounts+1)
 
 ```
 
-##Quality Control
+#Quality Control
 Normalisation is generally ok. Consistent differences between both tumour tissues and normal tissues post-normalisation.
 ```{r}
 quartz()
@@ -81,7 +81,7 @@ barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[conds], las=2,ce
 legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
 ```
 
-##Dispersion Plot
+#Dispersion Plot
 ```{r echo = FALSE}
 dds=nbinomWaldTest(dds)
 
@@ -222,9 +222,13 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 
 
-##GTEX DATA
 
-##DESeq Analysis
+
+
+
+
+
+##GTEX DATA
 
 ## Load in GTEX Data
 ```{r}
@@ -291,6 +295,9 @@ colnames(coldata)=c("Sample_Type", 'Batch')
 
 ```
 
+
+
+##DESeq Analysis
 
 #DESeq Object from merged counts matrix 'mergedcounts' EXCLUDING BATCH
 ```{r}
@@ -448,6 +455,9 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 
 ##Edge R Analysis
+
+##Edge R
+
 #Set-Up DGE Object and initial organisation
 ```{r}
 
@@ -468,7 +478,7 @@ dge$samples$norm.factors
 
 quartz()
 par(mfrow=c(1,2))
-boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main="Pre Normalised Data", ylab="Log-cpm")
+boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main="Pre Normalised Data", ylab="Log-cpm", cex.axis=0.5)
 
 lcpm=cpm(dge, log=T)
 
@@ -497,12 +507,12 @@ contrast1=efit
 
 
 #PCA
-pca=prcomp(t(v$E))
+voompca=prcomp(t(v$E))
 
 quartz()
-plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1)
-  text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
-  text(pca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
+plot(voompca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1)
+  text(voompca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+  text(voompca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
 
 
 #SA Plot
@@ -593,15 +603,6 @@ volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), high
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
 
-  
-#Butterfly Plot - To compare how much the comparisons are similar/agree with eachother
-quartz()
-plot(topTable(efit,coef=1,number=10000000000)$logFC,topTable(efit,coef=2,number=100000000000)$logFC)
-  abline(h=0)
-  abline(v=0)
-  abline(a=0,b=1, lty=3, col='red')
-
-
 #Further Analysis
 tfit = treat(vfit, lfc=1)
 dt = decideTests(tfit)
@@ -634,11 +635,11 @@ contrast3=efit
 
 
 #PCA Plot
-pca=prcomp(t(v$E))
+voompca=prcomp(t(v$E))
 quartz()
-plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds_origin], cex=1, title(main = 'PCA Plot'))
-text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
-text(pca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
+plot(voompca$x, pch=c(21,24)[batch], bg=cond_colours[conds_origin], cex=1, title(main = 'PCA Plot'))
+text(voompca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+text(voompca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
 
 
 #SA Plot
@@ -670,37 +671,33 @@ abline(a=0,b=1, lty=1, col='red')
 
 
 
----------------------------------------------------------
----------------------------------------------------------
+##Rlog Transformation (Instead of VST)
 
-
-
-##SVA Analysis
+#Rlog
 ```{r}
 
 #Starting from merged counts matrix
 #Convert to DESeq object
-dds=DESeqDataSetFromMatrix(mergedcounts, colData=coldata, design = ~Sample_Type + Batch)
+mergedds=DESeqDataSetFromMatrix(mergedcounts, colData=coldata, design = ~Sample_Type + Batch)
 
 
 #Remove low counts
-nrow(dds)
-dds=dds[rowSums(counts(dds))>1,]
-nrow(dds)
+nrow(mergedds)
+mergedds=mergedds[rowSums(counts(mergedds))>1,]
+nrow(mergedds)
 
 
 #rlog transformation
-rlt=rlog(dds, blind=F)
-
-
-dds=DESeq(dds)
-
+rlt=rlog(mergedds, blind=F)
 
 quartz()
 par(mfrow=c(1,2))
-plot(log2(counts(dds, normalized=TRUE)+ 1), pch=16, cex=0.3, main = 'Log2 Normalised Counts')
+plot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts')
 plot(assay(rlt), pch=16, cex=0.3, main='rlog Normalised Counts')
 
+quartz()
+boxplot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts', col=cond_colours[conds], las=2, cex.axis=0.5)
+boxplot(assay(rlt), col=cond_colours[conds], las=2, cex.axis=0.5, main='rlog Normalised Counts', pch=16, cex=0.3)
 
 #Sample Distances - rlog
 sampleDists=dist(t(assay(rlt)))
@@ -711,13 +708,13 @@ heatmap.2(sampleDistMatrix, cexRow = 0.5, cexCol = 0.5, col = hmcol, trace = 'no
 
 
 #PCA Plot
-pca=prcomp(t(assay(rlt)))
+rltpca=prcomp(t(assay(rlt)))
 quartz()
-plot(pca$x, pch=c(21,24)[batch], bg=cond_colours[conds], main='PCA Plot: rlog values')
-  text(pca$x,as.character(coldata$Batch),cex=0.3,pos=1)
-  text(pca$x,as.character(coldata$Sample_Type),cex=0.3,pos = 3)
+plot(rltpca$x, pch=c(21,24)[batch], bg=cond_colours[conds], main='PCA Plot: rlog values')
+  text(rltpca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+  text(rltpca$x,as.character(coldata$Sample_Type),cex=0.3,pos = 3)
   
-summary(pca)
+summary(rltpca)
 
 #MDS Plot
 mdsData=data.frame(cmdscale(sampleDistMatrix))
@@ -730,78 +727,98 @@ ggplot(mds, aes(X1,X2,color=Sample_Type,shape=Batch))+
   scale_color_manual(values=unique(cond_colours[mds$Sample_Type]))
 
 #Differential Expression Analysis
-dds=DESeq(dds)
+DESeqdds=DESeq(dds)
 
-res=results(dds)
-summary(res)
-
-#Lower False Discovery Rate
-#res.05 <- results(dds, alpha=.05) 
-#table(res.05$padj < .05)
-
-#Raise LFC Threshold
-#resLFC1 <- results(dds, lfcThreshold=1) 
-#table(resLFC1$padj < 0.1)
+rltres=results(DESeqdds)
+summary(rltres)
 
 sum(res$pvalue < 0.05, na.rm=TRUE)
 sum(!is.na(res$pvalue))
 
 sum(res$padj < 0.1, na.rm=TRUE)
 
-res=res[order(res$padj),]
+rltres=rltres[order(res$padj),]
 
 #Visualising top gene count distribution
-topGene=rownames(res)[which.min(res$padj)]
+topGene=rownames(rltres)[which.min(rltres$padj)]
 
 quartz()
 plotCounts(dds, gene=topGene, intgroup=c("Sample_Type"))
 
-
-topVarGenes=head(order(rowVars(assay(rlt)),decreasing=T), 50)
-mat <- assay(rlt)[ topVarGenes, ]
+TopSigGenes=rownames(rltres, 100)
+mat <- assay(rlt)[TopSigGenes, ]
 mat <- mat - rowMeans(mat)
 
-df <- as.data.frame(colData(rlt)[,c("Batch","Sample_Type")])
 
 heatmap.2(mat, trace='none', cexRow = 0.5, cexCol = 0.5, col=hmcol)
-heatmap.2(assay(rlt)[rownames(res[1:50,]),],col=hmcol,trace="none",cexRow = 0.5,cexCol = 0.5)
+heatmap.2(assay(rlt)[rownames(rltres[1:100,]),],col=hmcol,trace="none",cexRow = 0.5,cexCol = 0.5)
 
+#Rstne - rlog data
+set.seed(72)
+rlttsne = Rtsne(t(assay(rlt)), perplexity = 3)
+rlttsne.df=data.frame(rlttsne.1=rlttsne$Y[,1], rlttsne.2=rlttsne$Y[,2], Type=as.factor(mergedds$Sample_Type), Batch=as.factor(mergedds$Batch))
+
+quartz()
+ggplot(data = rlttsne.df, aes(rlttsne.1,  rlttsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[rlttsne.df$Type]))
+
+
+```
+
+
+
+##SVA
+
+#SVA Normalisation
+```{r}
           
-#Removing hidden batch effects
-dat=counts(dds,normalized=T)
+#Removing hidden batch effects using SVA
+dat=counts(DESeqdds,normalized=T)
 idx=rowMeans(dat)>1
 dat=dat[idx,]
 
-mod=model.matrix(~Sample_Type, colData(dds))
-mod0=model.matrix(~1, colData(dds))
+mod=model.matrix(~Sample_Type, colData(DESeqdds))
+mod0=model.matrix(~1, colData(DESeqdds))
 
-#Is n.sv=2 correct?
-svseq=svaseq(dat, mod, mod0,n.sv=2)
+n.sv = num.sv(dat,mod,method="leek")
+#This produces n.sv of 29 
+#Error occured, run svaseq with decreasing n.sv value
+svseq=svaseq(dat, mod, mod0,n.sv=27)
 
 quartz()
 par(mfrow=c(2,1),mar=c(3,5,3,1))
 
 stripchart(svseq$sv[,1] ~ dds$Batch,vertical=TRUE,main="SV1")
 abline(h=0)
+stripchart(svseq$sv[,1] ~ dds$Sample_Type,vertical=TRUE,main="SV1")
+abline(h=0)
 
 stripchart(svseq$sv[,2] ~ dds$Batch,vertical=TRUE,main="SV2")
 abline(h=0)
+stripchart(svseq$sv[,2] ~ dds$Sample_Type,vertical=TRUE,main="SV2")
+abline(h=0)
 
-ddssva = dds
+stripchart(svseq$sv[,3] ~ dds$Batch,vertical=TRUE,main="SV3")
+abline(h=0)
+stripchart(svseq$sv[,3] ~ dds$Sample_Type,vertical=TRUE,main="SV3")
+abline(h=0)
+
+
+ddssva = DESeqdds
 ddssva$SV1= svseq$sv[,1] 
 ddssva$SV2= svseq$sv[,2] 
 design(ddssva)= ~ SV1 + SV2 + Sample_Type
 
-ddssva <- DESeq(ddssva)
 
 ```
 
 
 #Data normalisation - SVA
 ```{r}
-mergenormcounts <- counts(ddssva, normalized=TRUE)
-mergerawcounts=counts(ddssva,normalized=FALSE)
-mergelog2counts=log2(mergenormcounts+1)
+svanormcounts <- counts(ddssva, normalized=TRUE)
+svarawcounts=counts(ddssva,normalized=FALSE)
+svalog2counts=log2(svanormcounts+1)
 
 quartz()
 par(mfrow=c(1,2))
@@ -810,7 +827,7 @@ barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
 barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts')
-legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
 ```
 
@@ -818,30 +835,33 @@ legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 #PCA Plots & Heatmaps - SVA
 ```{r}
 #Prcomp PCA
-pca=prcomp(t(assay(ddssva)))
+svapca=prcomp(t(assay(ddssva)))
 quartz()
-plot(pca$x, main='PCA Variance Stabilised for Merged Data', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
-text(pca$x, as.character(conds), pos=1, cex=0.4)
+plot(svapca$x, main='PCA Variance Stabilised for Merged Data', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
+text(svapca$x, as.character(conds), pos=1, cex=0.4)
 
-summary(pca)
+summary(svapca)
 
 ```
 
 #Rtsne SVA
 ```{r}
 set.seed(72)
-tsne = Rtsne(t(assay(ddssva)), perplexity = 3)
-tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(ddssva$Sample_Type), Batch=as.factor(ddssva$Batch))
+svatsne = Rtsne(t(assay(ddssva)), perplexity = 3)
+svatsne.df=data.frame(svatsne.1=svatsne$Y[,1], svatsne.2=svatsne$Y[,2], Type=as.factor(ddssva$Sample_Type), Batch=as.factor(ddssva$Batch))
 
 quartz()
-ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+ggplot(data = svatsne.df, aes(svatsne.1,  svatsne.2, colour=Type, shape=Batch))+
   geom_point(size=4)+
-  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
+  scale_color_manual(values=unique(cond_colours[svatsne.df$Type]))
 ```
 
 
 #Statistical Analysis - SVA
-
+(GTEX/TCGA (SVA)) Comparing Normal vs. Primary_Tumor
+Found:  3908  Statistical hits
+(GTEX/TCGA (SVA)) Comparing Normal vs. Recurrent_Tumor
+Found:  5640  Statistical hits
 ```{r}
 p_threshold=0.05
 lfc_threshold=0.7
@@ -882,13 +902,13 @@ for (i in 2:(length(condition_list))){
   
 }
 
-zz=counts(ddssva,normalized=T)[rownames(res[1:50,]),]
 quartz()
-heatmap.2(log2(zz+1),col=hmcol,trace="none")
+heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:100,]),]+1),col=hmcol,trace="none")
 ```
 
 
 #Medians - SVA 
+
 ```{r}
 
 median.primary=apply(mergevstMat[,21:24],1,median)
