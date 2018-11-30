@@ -138,6 +138,7 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
 ```
 
 #Statistical Analysis
+
 P threshold is set to 0.05.
 log fold change threshold set to 0.7
 
@@ -196,6 +197,7 @@ for (i in 2:(length(condition_list))){
 }
 
 ```
+
 
 ##Median
 ```{r echo=FALSE}
