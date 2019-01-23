@@ -312,3 +312,155 @@ qlf=glmQLFTest(fit2, coef = 2)
 qlf=glmQLFTest(fit2, coef = 3)
 qlf=glmQLFTest(fit2, coef = 4)
 
+-----------------------------------
+  
+#Edge R analysis with only conditions 
+  #Design only include conditions
+  ```{r}
+
+#Design
+design=model.matrix(~0+conds)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, condsRecurrent_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+contrast1=efit
+
+
+#PCA
+voompca=prcomp(t(v$E))
+
+quartz()
+plot(voompca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1)
+text(voompca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+text(voompca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot')
+legend('bottomleft', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary
+summary(decideTests(efit))
+
+
+#Volcano Plot
+quartz()
+volcanoplot(efit, coef=1,names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='Primary Tumour vs. Normal')
+abline(h=-log10(0.05), lty=3, col='red')
+abline(v=-1, lty=3, col='red')
+abline(v=1, lty=3, col='red')
+
+quartz()
+volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), highlight = 50, main='Recurrent Tumour vs. Normal') 
+abline(h=-log10(0.05), lty=3, col='red')
+abline(v=-1, lty=3, col='red')
+abline(v=1, lty=3, col='red')
+
+
+#Further Analysis
+tfit = treat(vfit, lfc=1)
+dt = decideTests(tfit)
+
+summary(dt)
+
+-------------------------------------------------------------------------
+  
+#Visualising top gene count distribution
+topGene=rownames(rltres)[which.min(rltres$padj)]
+
+quartz()
+plotCounts(mergedds, gene=topGene, intgroup=c("Sample_Type"), col=cond_colours[conds], pch=c(21,24)[batch])
+
+TopSigGenes=rownames(rltres, 100)
+mat <- assay(rlt)[TopSigGenes, ]
+mat <- mat - rowMeans(mat)
+
+-----------------------------------------------------------------------
+
+  #Rtsne SVA
+  
+  ```{r}
+set.seed(72)
+svatsne = Rtsne(t(assay(ddssva)), perplexity = 3)
+svatsne.df=data.frame(svatsne.1=svatsne$Y[,1], svatsne.2=svatsne$Y[,2], Type=as.factor(ddssva$Sample_Type), Batch=as.factor(ddssva$Batch))
+
+quartz()
+ggplot(data = svatsne.df, aes(svatsne.1,  svatsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[svatsne.df$Type]))+
+  ggtitle('Rtsne for SVA')
+
+
+------------------------------------------------------------------------
+
+  #Rstne - rlog data
+  set.seed(72)
+rlttsne = Rtsne(t(assay(rlt)), perplexity = 3)
+rlttsne.df=data.frame(rlttsne.1=rlttsne$Y[,1], rlttsne.2=rlttsne$Y[,2], Type=as.factor(mergedds$Sample_Type), Batch=as.factor(mergedds$Batch))
+
+quartz()
+ggplot(data = rlttsne.df, aes(rlttsne.1,  rlttsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[rlttsne.df$Type]))
+
+------------------------------------------------------------------------
+
+#Key TCGA code
+  Working Directory (Lab) & Libraries
+``` {r echo=FALSE, r eval=F}
+setwd("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel")
+
+library(RColorBrewer)
+library(gplots)
+library(ggplot2)
+library(DESeq2)
+library(Rtsne)
+library(pca3d)
+library(limma)
+library(genefilter)
+library(sva)
+library(edgeR)
+library(statmod)
+```
+
+#Upload pdata (TCGA)
+```{r}
+pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
+rownames(pdata)=pdata$Sample
+```
+
+#Read in count data
+Data taken from TCGA data repository - Liver Cancer mRNA
+datatype=HTSeq count data
+
+```{r}
+
+##TCGA DATA COUNTS
+```{r}
+ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '.', design = ~ Sample_Type)
+
+dds=estimateSizeFactors(ddsHTSeq)
+dds=estimateDispersions(dds)
+
+tcgarawcounts=counts(dds,normalized=FALSE)
+```
+
+# Load in Gene Names and match up with rownames in ddsHTSeq
+```{r}
+gene_names = read.table("gene_names.txt",row.names=1,header = F)
+gene_names= gene_names[rownames(ddsHTSeq),]
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+
