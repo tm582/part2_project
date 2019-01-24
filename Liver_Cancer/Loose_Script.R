@@ -464,3 +464,8 @@ gene_names= gene_names[rownames(ddsHTSeq),]
 colnames(gene_names)=c("GeneName","Source","BioType")
 ```
 
+---------------------------------------------------------------
+#For scaling up to full TCGA data set
+  
+pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
+rownames(pdata)=pdata$Sample

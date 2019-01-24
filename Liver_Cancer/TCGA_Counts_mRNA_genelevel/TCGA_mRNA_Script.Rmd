@@ -28,6 +28,10 @@ library(statmod)
 ```{r}
 pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
+
+#For scaling up to full TCGA data set
+pdata=read.table('pdata_rnaseq_genelevel.txt', header=T)
+rownames(pdata)=pdata$Sample
 ```
 
 #Set Conditions/Sample Types
@@ -69,7 +73,7 @@ log2counts=log2(normcounts+1)
 ```
 
 #Quality Control
-Normalisation is generally ok. Consistent differences between both tumour tissues and normal tissues post-normalisation.
+#Normalisation is generally ok. Consistent differences between both tumour tissues and normal tissues post-normalisation.
 ```{r}
 quartz()
 par(mfrow=c(1,2))
@@ -101,8 +105,8 @@ vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
 
 
 #PCA Plots & Heatmaps
-PCA plots shows good separation between tumour tissues and solid normals. One primary tumour point appears to be anomalous whilst another closer to recurrent tumour tissue type.
-Heatmap shows good clustering of solid tissue normals. Heatmap supports PCA plot in that one of the primary tumour points appears to be anomalous and does not closely match other primary tumours whilst another more closely matches recurrent tumour tissues.
+#PCA plots shows good separation between tumour tissues and solid normals. One primary tumour point appears to be anomalous whilst another closer to recurrent tumour tissue type.
+#Heatmap shows good clustering of solid tissue normals. Heatmap supports PCA plot in that one of the primary tumour points appears to be anomalous and does not closely match other primary tumours whilst another more closely matches recurrent tumour tissues.
 ```{r echo = FALSE}
 
 #Normal PCA Plot
@@ -124,7 +128,7 @@ heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pda
 
 
 ##Rtsne
-tsne shows good separation between all tisuse types. Anomalous primary tumour point is less apparent in the tsne plot. One primary tumour point reamins closely grouped with recurrent tumours.
+#tsne shows good separation between all tisuse types. Anomalous primary tumour point is less apparent in the tsne plot. One primary tumour point reamins closely grouped with recurrent tumours.
 ```{r}
 #Normalised counts data into tsne object
 set.seed(72)
@@ -139,20 +143,20 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
 
 #Statistical Analysis
 
-P threshold is set to 0.05.
-log fold change threshold set to 0.7
+#P threshold is set to 0.05.
+#log fold change threshold set to 0.7
 
-Comparing Solid_Tissue_Normal vs. Primary_Tumor
-Found:  2493  Statistical hits
+#Comparing Solid_Tissue_Normal vs. Primary_Tumor
+#Found:  2493  Statistical hits
 
-Comparing Solid_Tissue_Normal vs. Recurrent_Tumor
-Found:  3977  Statistical hits
+#Comparing Solid_Tissue_Normal vs. Recurrent_Tumor
+#Found:  3977  Statistical hits
 
-More hits (1484) found for recurrent tumour tissue suggesting that increased mutation lends itself to progression from primary to recurrent.
-Good separation of tumour types from solid tissue normal.
-Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours.
+#More hits (1484) found for recurrent tumour tissue suggesting that increased mutation lends itself to progression from primary to recurrent.
+#Good separation of tumour types from solid tissue normal.
+#Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours.
 
-Highlighted hits limited to 100.
+#Highlighted hits limited to 100.
 
 ```{r}
 p_threshold=0.05
@@ -558,7 +562,27 @@ summary(dt)
 
 #Heatmap for Edge R 
 quartz()
-heatmap.2(efit$coefficients[1:100,],col=hmcol,trace="none", cexCol = 0.5)
+
+# Extract the best 100 (by p-value) using the toptable command over all tests (i.e. coef 1 and 2)
+hits=rownames(topTable(efit,number=100))
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+#heatmap.2(log2(dge$counts+1)[hits,],trace="none",col=hmcol,Colv = FALSE)
+
+heatmap.2(lcpm[hits,], trace = 'none', col=hmcol, Colv=FALSE)
+
+#Comparing distribution between TCGA and GTEX normals
+quartz()
+par(mfrow=c(2,2))
+qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
+qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
+qqnorm(log2(dge$counts+1)[,31], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,32], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+
+apply(dge$counts, 2, median)
+
+#Distributions look similar betwen normals suggesting that the depth difference may account for the difficulty with comparisons. Downsamplig programme may tackle this by introdcing noise to the GTEx data in an effort to reduce the overall median
 ```
 
 
