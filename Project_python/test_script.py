@@ -34,4 +34,17 @@ first = 'Tara'
 last = 'Morrison'
 full = f'{first} {last}'
 
-#
+#Integrating user input
+x = input('x:')
+print(type(x))
+
+y = int(x) + 1 #int(x) converts x into an integer
+#float(x) - converts to floating number (real value will include decimal place)
+#str(x) - converts to string (text)
+#bool(x) - returns true or false
+
+import numpy as np
+with open('test.txt', 'r+') as matrix:
+    array = matrix.read().split()
+    print(array)
+    print(array[3,4])
