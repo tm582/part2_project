@@ -6,7 +6,7 @@ newpoint=randompoint-1
 
 
 
-randomcol=sample(ncol(test),1)
+randomcol=sample((test),1)
 randomcol
 randomrow=sample(nrow(test),1)
 randomrow
