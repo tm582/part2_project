@@ -43,8 +43,15 @@ y = int(x) + 1 #int(x) converts x into an integer
 #str(x) - converts to string (text)
 #bool(x) - returns true or false
 
+#
 import numpy as np
+import pandas as pd
+
 with open('test.txt', 'r+') as matrix:
     array = matrix.read().split()
     print(array)
-    print(array[3,4])
+
+import pandas as pd
+with open('test.txt', 'r+') as matrix:
+    data_table=pd.read_csv(matrix, index_col=0)
+print(data_table.iloc[:5, :5])
