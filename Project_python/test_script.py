@@ -55,3 +55,17 @@ import pandas as pd
 with open('test.txt', 'r+') as matrix:
     data_table=pd.read_csv(matrix, index_col=0)
 print(data_table.iloc[:5, :5])
+
+
+
+
+####################################################
+
+
+
+
+
+
+
+
+
