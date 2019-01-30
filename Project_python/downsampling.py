@@ -28,50 +28,46 @@ change = 0
 
 
 #Begin while loop where each iteration one count is sleected and reduced by one. Repeat until the mean of the medians of each sample has be reduced by 30%
-while change < 30:
+while change < 15:
 
     #Generate random column number and random row number
     col = random.randint(0,(ncol-1))
     row = random.randint(0,(nrow-1))
 
-    print("Coordinate of count to be changed is ROW = ", row,"and COLUMN = ",col)
+    #print("Coordinate of count to be changed is ROW = ", row,"and COLUMN = ",col)
 
 
     #Use coordinates to find random count
     oricount = x.iloc[row,col]
-    print("The original count is", oricount)
+    #print("The original count is", oricount)
 
     #Reduce count by 1
     if oricount>0:
-        print("Original count is greater than 0. Can proceed to -1")
+        #print("Original count is greater than 0. Can proceed to -1")
         newcount=oricount-1
-        print(newcount)
     else:
-        print("Original count = 0. Therefore do not adjust and repeat on new random count.")
+        #print("Original count = 0. Therefore do not adjust and repeat on new random count.")
         newcount=oricount
 
     #Check new count
-    print(newcount)
+    #print(newcount)
 
     #Replace old count for new count
     x.iat[row,col]=newcount
 
-    print(x)
-
     #Calculate NEW column medians and total average of medians
     medians=x.median()
-    print("The NEW median of each sample is\n",medians)
 
     newavemed=mean(medians)
-    print("The NEW average of medians is\n",avemed)
 
     change=((avemed-newavemed)/avemed)*100
-
-    print("Percentage of original =", change,"%")
     
-    if change==30:
+    if change==15:
         break
 
-
+print("The NEW median of each sample is\n",medians)
+print("The NEW average of medians is\n",avemed)
 print("The ORIGINAL matrix of counts\n", orix)
-print("The NEW matrix of counts - has been reduced by 30%\n", x)
+print("The NEW matrix of counts - has been reduced by", change, "%\n", x)
+
+x.to_csv('test_down.csv', sep='\t')

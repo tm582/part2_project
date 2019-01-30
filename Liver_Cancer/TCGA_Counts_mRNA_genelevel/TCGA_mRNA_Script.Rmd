@@ -20,6 +20,7 @@ library(genefilter)
 library(sva)
 library(edgeR)
 library(statmod)
+library(reticulate)
 ```
 
 ##TCGA DATA
@@ -30,8 +31,8 @@ pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
 
 #For scaling up to full TCGA data set
-pdata=read.table('pdata_rnaseq_genelevel.txt', header=T)
-rownames(pdata)=pdata$Sample
+#pdata=read.table('pdata_rnaseq_genelevel.txt', header=T)
+#rownames(pdata)=pdata$Sample
 ```
 
 #Set Conditions/Sample Types
@@ -58,7 +59,7 @@ gene_names = read.table("gene_names.txt",row.names=1,header = F)
 gene_names= gene_names[rownames(ddsHTSeq),]
 colnames(gene_names)=c("GeneName","Source","BioType")
 
-#colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
+colData(ddsHTSeq)$Sample_Type=factor(colData(ddsHTSeq)$Sample_Type, levels=levels(pdata$Sample_Type))
 
 dds=estimateSizeFactors(ddsHTSeq)
 dds=estimateDispersions(dds)
@@ -66,8 +67,9 @@ dds=estimateDispersions(dds)
 
 #Data Normalisation
 ```{r}
-normcounts <- counts(dds, normalized=TRUE)
+normcounts = counts(dds, normalized=TRUE)
 tcgarawcounts=counts(dds,normalized=FALSE)
+colnames(tcgarawcounts)=pdata$Sample_Type
 log2counts=log2(normcounts+1)
 
 ```
@@ -884,4 +886,158 @@ abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ```
 
+
+
+
+
+
+
+
+
+
+## Comparing dispersion of TCGA Normals and GTEX Normals
+
+
+```{r}
+
+#Subset TCGA normals from TCGA Data Set
+tcganorm=tcgarawcounts[,8:12]
+
+tcgasd=apply(tcganorm,1,sd)
+tcgamean=apply(tcganorm,1,mean)
+tcgavar=apply(tcganorm,1,var)
+
+
+tcgacov=tcgasd/tcgamean
+
+plot(log10(tcgamean),log10(tcgacov))
+
+
+#GTEX Normals - check that the inital subset from entire GTEX and against liver has been completed
+colnames(gtex)[]='GTEX Normal'
+
+gtexsd=apply(gtex,1,sd)
+gtexmean=apply(gtex,1,mean)
+gtexvar=apply(gtex,1,var)
+
+gtexcov=gtexsd/gtexmean
+
+par(mfrow=c(2,1))
+plot(log10(gtexmean), log10(gtexcov))
+plot(log10(tcgamean),log10(tcgacov))
+
+```
+
+
+##Using DESeq funciton plotDispEst() function to compare the dispersions of TCGA and GTEX
+
+```{r}
+#TCGA into dds object
+
+tt1=as.data.frame(colnames(tcganorm))
+colnames(tt1)="Type"
+
+dds1=DESeqDataSetFromMatrix(tcganorm,colData = tt1,design=~1)
+
+dds1=estimateSizeFactors(dds1)
+dds1=estimateDispersions(dds1)
+
+quartz()
+par(mfrow=c(2,1))
+
+plotDispEsts(dds1, main='TCGA Dispersion Plot - DESeq')
+
+#GTEX into dds object
+
+tt2=as.data.frame(colnames(gtex))
+colnames(tt2)="Type"
+
+dds2=DESeqDataSetFromMatrix(gtex,colData = tt2,design=~1)
+
+dds2=estimateSizeFactors(dds2)
+dds2=estimateDispersions(dds2)
+
+#Plot dispersions to compare
+quartz()
+par(mfrow=c(2,1))
+
+plotDispEsts(dds1, main='TCGA Dispersion Plot - DESeq')
+plotDispEsts(dds2, main='GTEX Dispersion Plot - DESeq')
+```
+
+
+
+
+
+
+
+## Python downsampling code
+```{python}
+import random
+import numpy as np
+import pandas as pd
+
+from statistics import mean
+
+#Import csv matrix file as data frame using pandas
+x = pd.read_csv('test.csv', index_col=0)
+orix=pd.read_csv('test.csv', index_col=0)
+
+
+#Calculate column median & total average of the medians
+medians=x.median()
+print("The median of each sample is\n",medians)
+
+avemed=mean(medians)
+print("The average of medians is\n",avemed)
+
+
+#Check number of columns and rows
+ncol = (len(x.columns))
+print("Total #columns in the data frame = ", ncol)
+
+nrow = (len(x.index))
+print("Total #rows in the data frame = ", nrow)
+
+change = 0
+
+
+#Begin while loop where each iteration one count is sleected and reduced by one. Repeat until the mean of the medians of each sample has be reduced by 30%
+while change < 15:
+
+    #Generate random column number and random row number
+    col = random.randint(0,(ncol-1))
+    row = random.randint(0,(nrow-1))
+
+
+    #Use coordinates to find random count
+    oricount = x.iloc[row,col]
+
+    #Reduce count by 1
+    if oricount>0:
+        newcount=oricount-1
+    else:
+        newcount=oricount
+
+    #Replace old count for new count
+    x.iat[row,col]=newcount
+
+    #Calculate NEW column medians and total average of medians
+    medians=x.median()
+
+    newavemed=mean(medians)
+
+    change=((avemed-newavemed)/avemed)*100
+    
+    if change==15:
+        break
+
+print("The NEW median of each sample is\n",medians)
+print("The NEW average of medians is\n",avemed)
+print("The ORIGINAL matrix of counts\n", orix)
+print("The NEW matrix of counts - has been reduced by", change, "%\n", x)
+
+x.to_csv('test_down.csv', sep='\t')
+
+```
 
