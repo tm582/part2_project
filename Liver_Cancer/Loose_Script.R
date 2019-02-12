@@ -469,3 +469,26 @@ colnames(gene_names)=c("GeneName","Source","BioType")
   
 pdata=read.table('pdata_rnaseq_genelevel_small.txt', header=T)
 rownames(pdata)=pdata$Sample
+
+----------------------------------------------------------------
+  #Medians - SVA 
+  
+  ```{r}
+
+median.primary=apply(mergevstMat[,21:24],1,median)
+median.recurrent=apply(mergevstMat[,25:27],1,median)
+median.normal=apply(mergevstMat[,c(1:20, 28:32)], 1, median)
+
+quartz()
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (SVA)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
+quartz()
+plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor (SVA)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
+```
