@@ -214,9 +214,9 @@ for (i in 2:(length(condition_list))){
 
 ##Median
 ```{r echo=FALSE}
-median.primary=apply(vstMat[,1:4],1,median)
-median.recurrent=apply(vstMat[,5:7],1,median)
-median.normal=apply(vstMat[,8:12],1,median)
+median.primary=apply(vstMat[,1:404],1,median)
+median.recurrent=apply(vstMat[,405:407],1,median)
+median.normal=apply(vstMat[,408:465],1,median)
 
 quartz()
 plot(median.normal,median.primary, main="Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
@@ -461,21 +461,21 @@ for (i in 2:(length(condition_list))){
 #Medians
 ```{r}
 
-#median.primary=apply(mergevstMat[,176:],1,median)
-#median.recurrent=apply(mergevstMat[,2:2],1,median)
-#median.normal=apply(mergevstMat[,c(1:175, 28:32)], 1, median)
+median.primary=apply(mergevstMat[,176:579],1,median)
+median.recurrent=apply(mergevstMat[,580:582],1,median)
+median.normal=apply(mergevstMat[,c(1:175, 583:640)], 1, median)
 
-#quartz()
-#plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
-#points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
-#text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
-#abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+quartz()
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
-#quartz()
-#plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
-#points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
-#text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
-#abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+quartz()
+plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ```
 
@@ -595,8 +595,8 @@ quartz()
 par(mfrow=c(2,2))
 qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
 qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
-#qqnorm(log2(dge$counts+1)[,31], main = 'Normal Q-Q Plot (TCGA Sample 1)')
-#qqnorm(log2(dge$counts+1)[,32], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+qqnorm(log2(dge$counts+1)[,639], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,640], main = 'Normal Q-Q Plot (TCGA Sample 2)')
 
 apply(dge$counts, 2, median)
 
@@ -610,18 +610,18 @@ apply(dge$counts, 2, median)
 #Readjust Conditions Vectors to distinguish between GTEX and TCGA Normals - This will allow us to compare effect of comparing each individually
 conds_origin=as.character(conds)
 conds_origin[1:175]=rep("Normal_GTEX",175)
-conds_origin[28:32]=rep("Normal_TCGA",5)
+conds_origin[583:640]=rep("Normal_TCGA",58)
 conds_origin=as.factor(conds_origin)
 
 
 #Design changes to reflect changes in conds > conds_origin
 design2=model.matrix(~0+conds_origin+batch)
-contr.matrix2=makeContrasts(conds_originPrimary_Tumor-conds_originNormal_TCGA, conds_originPrimary_Tumor-conds_originNormal_GTEX, conds_originRecurrent_Tumor - conds_originNormal_TCGA, conds_originRecurrent_Tumor-conds_originNormal_GTEX, levels = colnames(design))
+contr.matrix2=makeContrasts(conds_originPrimary_Tumor-conds_originNormal_TCGA, conds_originPrimary_Tumor-conds_originNormal_GTEX, conds_originRecurrent_Tumor - conds_originNormal_TCGA, conds_originRecurrent_Tumor-conds_originNormal_GTEX, levels = colnames(design2))
 
 quartz()
 v2=voom(dge, design, plot = T)
 
-vfit2=lmFit(v2, design)
+vfit2=lmFit(v2, design2)
 vfit2=contrasts.fit(vfit2, contrasts = contr.matrix2)
 efit2=eBayes(vfit2)
 
