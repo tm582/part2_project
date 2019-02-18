@@ -227,7 +227,7 @@ volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), high
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
   
-volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Recurrent Tumour vs. Normal') 
+volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),2]), highlight = 100, main='Recurrent Tumour vs. Normal') 
   abline(h=-log10(0.05), lty=3, col='red')
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')

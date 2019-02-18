@@ -425,7 +425,7 @@ condition_list=levels(conds)
 for (i in 2:(length(condition_list))){
  
   normal=condition_list[1]
-  compare=condition_list[i]
+  compare=condition_list[3]
 
   print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
   
@@ -568,7 +568,7 @@ volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), high
   abline(v=1, lty=3, col='red')
   
 quartz()
-volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Recurrent Tumour vs. Normal') 
+volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),2]), highlight = 100, main='Recurrent Tumour vs. Normal') 
   abline(h=-log10(0.05), lty=3, col='red')
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
@@ -845,7 +845,7 @@ condition_list=levels(conds)
 for (i in 2:(length(condition_list))){
  
   normal=condition_list[1]
-  compare=condition_list[i]
+  compare=condition_list[2]
 
   print(paste('(SVA) Comparing', normal, 'vs.', compare))
   
