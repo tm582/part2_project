@@ -27,11 +27,6 @@ library(reticulate)
 
 ##TCGA DATA
 
-#Save out plots
-```{r}
-pdf(file='TCGA_only.pdf')
-```
-
 #Upload pdata (TCGA)
 ```{r}
 #pdata=read.table('~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/pdata_rnaseq_genelevel_small.txt', header=T)
@@ -45,6 +40,7 @@ rownames(pdata)=pdata$Sample
 #Set Conditions/Sample Types
 There are 3 levels: Primary Tumour, Recurrent Tumour and Normal Tissue
 ```{r}
+#Identify the conditions and allocate a colour to each
 conds=(pdata$Sample_Type)
 cond_colours=brewer.pal(length(unique(conds)), 'Set1')
 names(cond_colours)=unique(conds)
@@ -55,6 +51,7 @@ Data taken from TCGA data repository - Liver Cancer mRNA
 datatype=HTSeq count data
 ```{r}
 ##TCGA DATA COUNTS
+#Count data is loaded in from HTSeq Count available in the pdata file retreived from TCGA
 
 ddsHTSeq=DESeqDataSetFromHTSeqCount(sampleTable = pdata, directory= '~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel', design = ~ Sample_Type)
 
@@ -154,20 +151,11 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
 
 #P threshold is set to 0.05.
 #log fold change threshold set to 0.7
-
-#Comparing Solid_Tissue_Normal vs. Primary_Tumor
-#Found:  2493  Statistical hits
-
-#Comparing Solid_Tissue_Normal vs. Recurrent_Tumor
-#Found:  3977  Statistical hits
-
-#More hits (1484) found for recurrent tumour tissue suggesting that increased mutation lends itself to progression from primary to recurrent.
-#Good separation of tumour types from solid tissue normal.
-#Primary tumour shows increased prevalence of down regualtion of gene expression. Recurrent tumours are similar but, comparatively, more genes are also significantly up regulated in recurrent tumours.
-
 #Highlighted hits limited to 100.
 
 ```{r}
+#Threshold for P-value is set to 0.05 and log fold change oh 0.7 (absolute lfc used)
+
 p_threshold=0.05
 lfc_threshold=0.7
 max_display_hits=100
@@ -214,6 +202,7 @@ for (i in 2:(length(condition_list))){
 
 ##Median
 ```{r echo=FALSE}
+#Median found across the rows for each condition
 median.primary=apply(vstMat[,1:404],1,median)
 median.recurrent=apply(vstMat[,405:407],1,median)
 median.normal=apply(vstMat[,408:465],1,median)
@@ -410,11 +399,6 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
 
 
 #Statistical Analysis - Merged Data
-(GTEX/TCGA Merged) Comparing Normal vs. Primary_Tumor
-Found:  3902  Statistical hits
-
-(GTEX/TCGA Merged) Comparing Normal vs. Recurrent_Tumor
-Found:  5630  Statistical hits
 ```{r}
 p_threshold=0.05
 lfc_threshold=0.7
@@ -425,7 +409,7 @@ condition_list=levels(conds)
 for (i in 2:(length(condition_list))){
  
   normal=condition_list[1]
-  compare=condition_list[3]
+  compare=condition_list[i]
 
   print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
   
@@ -582,6 +566,59 @@ summary(dt)
 quartz()
 
 # Extract the best 100 (by p-value) using the toptable command over all tests (i.e. coef 1 and 2)
+#primarypval=as.data.frame(efit$p.value[,1])
+#primarysig=as.data.frame(primarypval[primarypval<=0.05])
+#rownames(primarysig)=rownames(primarypval)[primarypval<=0.05]
+
+#primarysig=apply(primarysig,2,sort)
+#primarysig=as.data.frame(primarysig[1:100,])
+#colnames(primarysig)=c('p-value')
+
+#rownames(primarysig)=gene_names[rownames(primarysig),]$GeneName
+
+#recurrentpval=as.data.frame(efit$p.value[,2])
+#recurrentsig=as.data.frame(recurrentpval[recurrentpval<=0.05])
+#rownames(recurrentsig)=rownames(recurrentpval)[recurrentpval<=0.05]
+
+#recurrentsig=apply(recurrentsig,2,sort)
+#recurrentsig=as.data.frame(recurrentsig[1:100,])
+#colnames(recurrentsig)=c('p-value')
+
+#rownames(recurrentsig)=gene_names[rownames(recurrentsig),]$GeneName
+
+
+
+
+tfit=treat(efit, lfc = log2(0.7))
+lfcprim=topTreat(tfit,coef = 1, number=100000000000000)
+
+primsig=lfcprim[lfcprim$adj.P.Val<=0.05,]
+primsig=primsig[abs(primsig$logFC)>=0.7,]
+primsig$logFC=abs(primsig$logFC)
+
+
+primsig=subset(primsig, select=c('logFC'))
+primsig=apply(primsig,2,sort, decreasing=TRUE)
+
+topprimsig=as.data.frame(primsig[1:100,])
+rownames(topprimsig)=gene_names[rownames(topprimsig),]$GeneName
+
+
+lfcrec=topTreat(tfit,coef = 2, number=100000000000000)
+
+recsig=lfcrec[lfcrec$adj.P.Val<=0.05,]
+recsig=recsig[abs(recsig$logFC)>=0.7,]
+recsig$logFC=abs(recsig$logFC)
+
+
+recsig=subset(recsig, select=c('logFC'))
+recsig=apply(recsig,2,sort, decreasing=TRUE)
+
+toprecsig=as.data.frame(recsig[1:100,])
+rownames(toprecsig)=gene_names[rownames(toprecsig),]$GeneName
+
+
+
 hits=rownames(topTable(efit,number=100))
 
 # Heatmap the top 100 from above using the log 2 of the voom normalised counts.
@@ -845,7 +882,7 @@ condition_list=levels(conds)
 for (i in 2:(length(condition_list))){
  
   normal=condition_list[1]
-  compare=condition_list[2]
+  compare=condition_list[i]
 
   print(paste('(SVA) Comparing', normal, 'vs.', compare))
   
@@ -889,7 +926,7 @@ save.image("~/Desktop/part2_project/Liver_Cancer/merged_sva.RData")
 
 
 ## Comparing dispersion of TCGA Normals and GTEX Normals
-
+#The coefficient of variance is calculated by dividing standard deviation of each egne expression by the variance. When plotted against the mean this can be used to establish and compare overdispersion.
 
 ```{r}
 
@@ -962,6 +999,7 @@ save.image("~/Desktop/part2_project/Liver_Cancer/merged_overdisp.RData")
 
 
 ## Python downsampling code
+#Using the reticualte programme python code can be run within R. The GTEx matrix isdownsampled by the amoutn specified. Select programmes need to be imported for Python.
 ```{python}
 import random
 import numpy as np
