@@ -324,6 +324,14 @@ dev.off()
 ```
 
 ```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/vst_heatmap.pdf')
+
+heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA')
+
+dev.off()
+```
+
+```{r}
 
 pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_volcano_heatmap.pdf')
 
@@ -353,6 +361,9 @@ for (i in 2:(length(condition_list))){
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
 
+
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  
   } else {
     print(paste("No Results for ",compare))
   }

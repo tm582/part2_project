@@ -23,6 +23,7 @@ library(sva)
 library(edgeR)
 library(statmod)
 library(reticulate)
+library(goseq)
 ```
 
 ##TCGA DATA
@@ -155,6 +156,8 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
 
 ```{r}
 #Threshold for P-value is set to 0.05 and log fold change oh 0.7 (absolute lfc used)
+#For loop in place to consecutively compare primary and recurrent tumour against normals
+#Signifciant hits identified using the adjusted p value and the log fold change - producing volcano plots and heatmap
 
 p_threshold=0.05
 lfc_threshold=0.7
@@ -388,7 +391,7 @@ summary(mergepca)
 PCA plots shows better seapartion between normals and tumour tissues than tsne plots. PCA plots will be used in other methods too.
 ```{r}
 set.seed(72)
-tsne = Rtsne(t(mergevstMat), perplexity = 3)
+tsne = Rtsne(t(mergevstMat), perplexity = 30)
 tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(mergedds$Sample_Type), Batch=as.factor(mergedds$Batch))
 
 quartz()
@@ -867,11 +870,18 @@ summary(svapca)
 
 ```
 
+#VST Normalisation of SVA
+```{r}
+svavsd <- varianceStabilizingTransformation(ddssva, blind = F)
+svavstMat <- assay(svavsd)
+svavstcounts <- svavstMat[order(apply(svavstMat,1,sum),decreasing =TRUE),]
+
+quartz()
+heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA')
+```
+
 #Statistical Analysis - SVA
-(GTEX/TCGA (SVA)) Comparing Normal vs. Primary_Tumor
-Found:  3908  Statistical hits
-(GTEX/TCGA (SVA)) Comparing Normal vs. Recurrent_Tumor
-Found:  5640  Statistical hits
+
 ```{r}
 p_threshold=0.05
 lfc_threshold=0.7
@@ -906,6 +916,10 @@ for (i in 2:(length(condition_list))){
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
 
+  
+quartz()
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  
   } else {
     print(paste("No Results for ",compare))
   }
