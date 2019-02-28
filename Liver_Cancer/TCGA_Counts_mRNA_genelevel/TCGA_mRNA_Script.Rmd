@@ -23,7 +23,7 @@ library(sva)
 library(edgeR)
 library(statmod)
 library(reticulate)
-library(goseq)
+
 ```
 
 ##TCGA DATA
@@ -159,9 +159,9 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
 #For loop in place to consecutively compare primary and recurrent tumour against normals
 #Signifciant hits identified using the adjusted p value and the log fold change - producing volcano plots and heatmap
 
-p_threshold=0.05
-lfc_threshold=0.7
-max_display_hits=100
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
 
 condition_list=levels(conds)
 
@@ -173,7 +173,7 @@ for (i in 2:(length(condition_list))){
   print(paste('Comparing', normal, 'vs.', compare))
   
   res=results(dds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
 
@@ -403,9 +403,9 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
 
 #Statistical Analysis - Merged Data
 ```{r}
-p_threshold=0.05
-lfc_threshold=0.7
-max_display_hits=100
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
 
 condition_list=levels(conds)
 
@@ -417,7 +417,7 @@ for (i in 2:(length(condition_list))){
   print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
   
   res=results(mergedds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
   
@@ -432,12 +432,12 @@ for (i in 2:(length(condition_list))){
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEX/TCGA Merged)'), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
   text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
  
   quartz()
-  heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
   } else {
     print(paste("No Results for ",compare))
   }
@@ -550,85 +550,52 @@ summary(decideTests(efit))
 #Volcano Plots
 quartz()
 volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Primary Tumour vs. Normal')
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
   
 quartz()
 volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),2]), highlight = 100, main='Recurrent Tumour vs. Normal') 
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
 
 #Further Analysis
-tfit = treat(vfit, lfc=1)
+tfit = treat(efit, lfc=lfc_threshold)
 dt = decideTests(tfit)
 summary(dt)
 
-#Heatmap for Edge R 
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+hit_table2=topTable(efit,coef=2,number=10000000000000)
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+hit_table2=hit_table2[order(abs(hit_table2$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+hitlist2=rownames(hit_table2[((abs(hit_table2$logFC) >= lfc_threshold) & (hit_table2$adj.P.Val<=p_threshold)),])
+
 quartz()
-
-# Extract the best 100 (by p-value) using the toptable command over all tests (i.e. coef 1 and 2)
-#primarypval=as.data.frame(efit$p.value[,1])
-#primarysig=as.data.frame(primarypval[primarypval<=0.05])
-#rownames(primarysig)=rownames(primarypval)[primarypval<=0.05]
-
-#primarysig=apply(primarysig,2,sort)
-#primarysig=as.data.frame(primarysig[1:100,])
-#colnames(primarysig)=c('p-value')
-
-#rownames(primarysig)=gene_names[rownames(primarysig),]$GeneName
-
-#recurrentpval=as.data.frame(efit$p.value[,2])
-#recurrentsig=as.data.frame(recurrentpval[recurrentpval<=0.05])
-#rownames(recurrentsig)=rownames(recurrentpval)[recurrentpval<=0.05]
-
-#recurrentsig=apply(recurrentsig,2,sort)
-#recurrentsig=as.data.frame(recurrentsig[1:100,])
-#colnames(recurrentsig)=c('p-value')
-
-#rownames(recurrentsig)=gene_names[rownames(recurrentsig),]$GeneName
-
-
-
-
-tfit=treat(efit, lfc = log2(0.7))
-lfcprim=topTreat(tfit,coef = 1, number=100000000000000)
-
-primsig=lfcprim[lfcprim$adj.P.Val<=0.05,]
-primsig=primsig[abs(primsig$logFC)>=0.7,]
-primsig$logFC=abs(primsig$logFC)
-
-
-primsig=subset(primsig, select=c('logFC'))
-primsig=apply(primsig,2,sort, decreasing=TRUE)
-
-topprimsig=as.data.frame(primsig[1:100,])
-rownames(topprimsig)=gene_names[rownames(topprimsig),]$GeneName
-
-
-lfcrec=topTreat(tfit,coef = 2, number=100000000000000)
-
-recsig=lfcrec[lfcrec$adj.P.Val<=0.05,]
-recsig=recsig[abs(recsig$logFC)>=0.7,]
-recsig$logFC=abs(recsig$logFC)
-
-
-recsig=subset(recsig, select=c('logFC'))
-recsig=apply(recsig,2,sort, decreasing=TRUE)
-
-toprecsig=as.data.frame(recsig[1:100,])
-rownames(toprecsig)=gene_names[rownames(toprecsig),]$GeneName
-
-
-
-hits=rownames(topTable(efit,number=100))
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1,"logFC"],-log10(hit_table1[hitlist1,"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+  
+quartz()
+plot(hit_table2$logFC,-log10(hit_table2$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Recurrent Tumour (Voom)')
+points(hit_table2[hitlist2,"logFC"],-log10(hit_table2[hitlist2,"adj.P.Val"]),cex=0.4,col="cyan")
+text(hit_table2[1:100,]$logFC,-log10(hit_table2[1:100,]$adj.P.Val), labels= gene_names[hitlist2[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
 
 # Heatmap the top 100 from above using the log 2 of the voom normalised counts.
 quartz()
 #heatmap.2(log2(dge$counts+1)[hits,],trace="none",col=hmcol,Colv = FALSE)
 
-heatmap.2(lcpm[hits,], trace = 'none', col=hmcol, Colv=FALSE)
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour')
+heatmap.2(lcpm[hitlist2[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour')
 
 #Comparing distribution between TCGA and GTEX normals
 quartz()
@@ -706,83 +673,6 @@ save.image("~/Desktop/part2_project/Liver_Cancer/merged_edger.RData")
 ```
 
 
-##Rlog Transformation (Instead of VST)
-
-#Rlog
-
-#Starting from merged counts matrix
-#Convert to DESeq object
-mergedds=DESeqDataSetFromMatrix(mergedcounts, colData=coldata, design = ~Sample_Type + Batch)
-
-
-#Remove low counts
-nrow(mergedds)
-mergedds=mergedds[rowSums(counts(mergedds))>1,]
-nrow(mergedds)
-
-
-#rlog transformation
-rlt=rlog(mergedds, blind=F)
-
-quartz()
-par(mfrow=c(1,2))
-plot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts')
-plot(assay(rlt), pch=16, cex=0.3, main='rlog Normalised Counts')
-
-quartz()
-par(mfrow=c(2,2))
-boxplot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts', col=cond_colours[conds], las=2, cex.axis=0.5)
-barplot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts', col=cond_colours[conds], las=2, cex.axis=0.5)
-boxplot(assay(rlt), col=cond_colours[conds], las=2, cex.axis=0.5, main='rlog Normalised Counts', pch=16, cex=0.3)
-barplot(assay(rlt), col=cond_colours[conds], las=2, cex.axis=0.5, main='rlog Normalised Counts', pch=16, cex=0.3)
-
-#Sample Distances - rlog
-sampleDists=dist(t(assay(rlt)))
-sampleDistMatrix <- as.matrix(sampleDists)
-
-quartz()
-heatmap.2(sampleDistMatrix, cexRow = 0.5, cexCol = 0.5, col = hmcol, trace = 'none', main = 'Sample-to-Sample Distances Using Rlog Values')
-
-
-#PCA Plot
-rltpca=prcomp(t(assay(rlt)))
-quartz()
-plot(rltpca$x, pch=c(21,24)[batch], bg=cond_colours[conds], main='PCA Plot: rlog values')
-  text(rltpca$x,as.character(coldata$Batch),cex=0.3,pos=1)
-  text(rltpca$x,as.character(coldata$Sample_Type),cex=0.3,pos = 3)
-  
-summary(rltpca)
-
-#MDS Plot
-mdsData=data.frame(cmdscale(sampleDistMatrix))
-mds=cbind(mdsData, as.data.frame(colData(rlt)))
-
-quartz()
-ggplot(mds, aes(X1,X2,color=Sample_Type,shape=Batch))+
-  geom_point(size=3)+ 
-  ggtitle('MDS Plot - Rlog')+
-  scale_color_manual(values=unique(cond_colours[mds$Sample_Type]))
-
-#Differential Expression Analysis
-DESeqdds=DESeq(mergedds)
-
-rltres=results(DESeqdds)
-summary(rltres)
-
-sum(rltres$pvalue < 0.05, na.rm=TRUE)
-sum(!is.na(rltres$pvalue))
-
-sum(rltres$padj < 0.1, na.rm=TRUE)
-
-rltres=rltres[order((rltres$padj)),]
-
-heatmap.2(mat, trace='none', cexRow = 0.5, cexCol = 0.5, col=hmcol)
-heatmap.2(assay(rlt)[rownames(rltres[1:100,]),],col=hmcol,trace="none",cexRow = 0.5,cexCol = 0.5, main='Heatmap of top 100 genes - Rlog')
-
-
-```{r}
-save.image("~/Desktop/part2_project/Liver_Cancer/merged_rlog.RData")
-```
 
 ##SVA
 
@@ -790,6 +680,7 @@ save.image("~/Desktop/part2_project/Liver_Cancer/merged_rlog.RData")
 ```{r}
           
 #Removing hidden batch effects using SVA
+DESeqdds=DESeq(mergedds)
 dat=counts(DESeqdds,normalized=T)
 idx=rowMeans(dat)>1
 dat=dat[idx,]
@@ -798,9 +689,9 @@ mod=model.matrix(~Sample_Type, colData(DESeqdds))
 mod0=model.matrix(~1, colData(DESeqdds))
 
 n.sv = num.sv(dat,mod,method="leek") 
-#This produces n.sv of 29 
+#This produces n.sv of  
 #Error occured, run svaseq with decreasing n.sv value
-svseq=svaseq(dat, mod, mod0,n.sv=27)
+svseq=svaseq(dat, mod, mod0,n.sv)
 
 quartz()
 par(mfrow=c(2,1),mar=c(3,5,3,1))
@@ -883,10 +774,6 @@ heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 
 #Statistical Analysis - SVA
 
 ```{r}
-p_threshold=0.05
-lfc_threshold=0.7
-max_display_hits=100
-
 condition_list=levels(conds)
 
 for (i in 2:(length(condition_list))){
@@ -897,7 +784,7 @@ for (i in 2:(length(condition_list))){
   print(paste('(SVA) Comparing', normal, 'vs.', compare))
   
   res=results(ddssva, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
   
@@ -918,7 +805,7 @@ for (i in 2:(length(condition_list))){
 
   
 quartz()
-  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
   
   } else {
     print(paste("No Results for ",compare))
@@ -931,7 +818,6 @@ heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:100,]),]+1),col=hmcol,
 ```
 
 
-##Save out plots
 ```{r}
 save.image("~/Desktop/part2_project/Liver_Cancer/merged_sva.RData")
 ```
@@ -1015,9 +901,9 @@ save.image("~/Desktop/part2_project/Liver_Cancer/merged_overdisp.RData")
 ## Python downsampling code
 #Using the reticualte programme python code can be run within R. The GTEx matrix isdownsampled by the amoutn specified. Select programmes need to be imported for Python.
 ```{python}
-import random
-import numpy as np
-import pandas as pd
+import(random)
+np=import(numpy)
+pd=import(pandas)
 
 from statistics import mean
 

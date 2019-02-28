@@ -492,3 +492,140 @@ text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_name
 abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
 ```
+----------------------------------------------------------------
+  
+  ##Rlog Transformation (Instead of VST)
+  
+  #Rlog
+  
+  #Starting from merged counts matrix
+  #Convert to DESeq object
+  mergedds=DESeqDataSetFromMatrix(mergedcounts, colData=coldata, design = ~Sample_Type + Batch)
+
+
+#Remove low counts
+nrow(mergedds)
+mergedds=mergedds[rowSums(counts(mergedds))>1,]
+nrow(mergedds)
+
+
+#rlog transformation
+rlt=rlog(mergedds, blind=F)
+
+quartz()
+par(mfrow=c(1,2))
+plot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts')
+plot(assay(rlt), pch=16, cex=0.3, main='rlog Normalised Counts')
+
+quartz()
+par(mfrow=c(2,2))
+boxplot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts', col=cond_colours[conds], las=2, cex.axis=0.5)
+barplot(log2(counts(mergedds, normalized=FALSE)+ 1), pch=16, cex=0.3, main = 'Pre Normalised Counts', col=cond_colours[conds], las=2, cex.axis=0.5)
+boxplot(assay(rlt), col=cond_colours[conds], las=2, cex.axis=0.5, main='rlog Normalised Counts', pch=16, cex=0.3)
+barplot(assay(rlt), col=cond_colours[conds], las=2, cex.axis=0.5, main='rlog Normalised Counts', pch=16, cex=0.3)
+
+#Sample Distances - rlog
+sampleDists=dist(t(assay(rlt)))
+sampleDistMatrix <- as.matrix(sampleDists)
+
+quartz()
+heatmap.2(sampleDistMatrix, cexRow = 0.5, cexCol = 0.5, col = hmcol, trace = 'none', main = 'Sample-to-Sample Distances Using Rlog Values')
+
+
+#PCA Plot
+rltpca=prcomp(t(assay(rlt)))
+quartz()
+plot(rltpca$x, pch=c(21,24)[batch], bg=cond_colours[conds], main='PCA Plot: rlog values')
+text(rltpca$x,as.character(coldata$Batch),cex=0.3,pos=1)
+text(rltpca$x,as.character(coldata$Sample_Type),cex=0.3,pos = 3)
+
+summary(rltpca)
+
+#MDS Plot
+mdsData=data.frame(cmdscale(sampleDistMatrix))
+mds=cbind(mdsData, as.data.frame(colData(rlt)))
+
+quartz()
+ggplot(mds, aes(X1,X2,color=Sample_Type,shape=Batch))+
+  geom_point(size=3)+ 
+  ggtitle('MDS Plot - Rlog')+
+  scale_color_manual(values=unique(cond_colours[mds$Sample_Type]))
+
+#Differential Expression Analysis
+DESeqdds=DESeq(mergedds)
+
+rltres=results(DESeqdds)
+summary(rltres)
+
+sum(rltres$pvalue < 0.05, na.rm=TRUE)
+sum(!is.na(rltres$pvalue))
+
+sum(rltres$padj < 0.1, na.rm=TRUE)
+
+rltres=rltres[order((rltres$padj)),]
+
+heatmap.2(mat, trace='none', cexRow = 0.5, cexCol = 0.5, col=hmcol)
+heatmap.2(assay(rlt)[rownames(rltres[1:100,]),],col=hmcol,trace="none",cexRow = 0.5,cexCol = 0.5, main='Heatmap of top 100 genes - Rlog')
+
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/merged_rlog.RData")
+```
+
+----------------------------------------------------------------
+  
+  # Extract the best 100 (by p-value) using the toptable command over all tests (i.e. coef 1 and 2)
+  #primarypval=as.data.frame(efit$p.value[,1])
+  #primarysig=as.data.frame(primarypval[primarypval<=0.05])
+  #rownames(primarysig)=rownames(primarypval)[primarypval<=0.05]
+  
+  #primarysig=apply(primarysig,2,sort)
+  #primarysig=as.data.frame(primarysig[1:100,])
+  #colnames(primarysig)=c('p-value')
+  
+  #rownames(primarysig)=gene_names[rownames(primarysig),]$GeneName
+
+#recurrentpval=as.data.frame(efit$p.value[,2])
+#recurrentsig=as.data.frame(recurrentpval[recurrentpval<=0.05])
+#rownames(recurrentsig)=rownames(recurrentpval)[recurrentpval<=0.05]
+
+#recurrentsig=apply(recurrentsig,2,sort)
+#recurrentsig=as.data.frame(recurrentsig[1:100,])
+#colnames(recurrentsig)=c('p-value')
+
+#rownames(recurrentsig)=gene_names[rownames(recurrentsig),]$GeneName
+
+
+tfit=treat(efit, lfc = log2(0.7))
+
+
+#lfcprim=topTreat(tfit,coef = 1, number=100000000000000)
+
+#primsig=lfcprim[lfcprim$adj.P.Val<=0.05,]
+#primsig=primsig[abs(primsig$logFC)>=0.7,]
+#primsig$logFC=abs(primsig$logFC)
+
+
+#primsig=subset(primsig, select=c('logFC'))
+#primsig=apply(primsig,2,sort, decreasing=TRUE)
+
+#topprimsig=as.data.frame(primsig[1:100,])
+#rownames(topprimsig)=gene_names[rownames(topprimsig),]$GeneName
+
+
+#lfcrec=topTreat(tfit,coef = 2, number=100000000000000)
+
+#recsig=lfcrec[lfcrec$adj.P.Val<=0.05,]
+#recsig=recsig[abs(recsig$logFC)>=0.7,]
+#recsig$logFC=abs(recsig$logFC)
+
+
+#recsig=subset(recsig, select=c('logFC'))
+#recsig=apply(recsig,2,sort, decreasing=TRUE)
+
+#toprecsig=as.data.frame(recsig[1:100,])
+#rownames(toprecsig)=gene_names[rownames(toprecsig),]$GeneName
+
+
+
+#hits=rownames(topTable(efit,number=100))

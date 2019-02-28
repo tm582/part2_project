@@ -24,9 +24,6 @@ pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_dispersion.pdf'
 
 plotDispEsts(dds,main='Dispersion Plot - TCGA')
 
-plot(pca$x, main='PCA Variance Stabilised - TCGA', pch=21, col='black', bg=cond_colours[conds],cex=1)
-text(pca$x, as.character(conds), pos=1, cex=0.4)
-
 heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts - TCGA')
 
 dev.off()
@@ -34,6 +31,12 @@ dev.off()
 
 ```{r}
 pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_PCA_tsne.pdf')
+
+pca=prcomp(t(assay(vsd)))
+
+plot(pca$x, main='PCA Variance Stabilised - TCGA', pch=21, col='black', bg=cond_colours[conds],cex=1)
+text(pca$x, as.character(conds), pos=1, cex=0.4)
+summary(pca)
 
 ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
   geom_point(size=4)+
