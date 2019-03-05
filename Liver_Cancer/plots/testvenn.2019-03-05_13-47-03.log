@@ -1,0 +1,12 @@
+INFO [2019-03-05 13:47:03] $x
+INFO [2019-03-05 13:47:03] c(SVAprimhits, SVArechits)
+INFO [2019-03-05 13:47:03] 
+INFO [2019-03-05 13:47:03] $filename
+INFO [2019-03-05 13:47:03] [1] "~/Desktop/part2_project/Liver_Cancer/plots/testvenn"
+INFO [2019-03-05 13:47:03] 
+INFO [2019-03-05 13:47:03] $na
+INFO [2019-03-05 13:47:03] [1] "remove"
+INFO [2019-03-05 13:47:03] 
+INFO [2019-03-05 13:47:03] $category.names
+INFO [2019-03-05 13:47:03] c("SVA Primary Hits", "SVA Recurrent Hits", cat.cex = 0.5)
+INFO [2019-03-05 13:47:03] 

@@ -57,7 +57,7 @@ for (i in 2:(length(condition_list))){
   print(paste('Comparing', normal, 'vs.', compare))
   
   res=results(dds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
 
@@ -71,29 +71,18 @@ for (i in 2:(length(condition_list))){
 
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
-  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
   abline(h=-log10(0.05), lty=3, col='red')
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
  
-  
+
   heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste('Heatmap Sig. Hits for', compare),labCol = conds, cexCol = 0.5) 
   } else {
     print(paste("No Results for ",compare))
   }
   
 }
-
-plot(median.normal,median.primary, main="Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
-points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
-text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
-abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
-
-plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor", pch=19, col='darkblue', cex=0.4)
-points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
-text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
-abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
-
 dev.off()
 ```
 
@@ -150,7 +139,7 @@ for (i in 2:(length(condition_list))){
   print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
   
   res=results(mergedds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
   
@@ -164,17 +153,22 @@ for (i in 2:(length(condition_list))){
 
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEX/TCGA Merged)'), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
-  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
  
-
-  heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+ 
+  heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
   } else {
     print(paste("No Results for ",compare))
   }
 }
+
+median.primary=apply(mergevstMat[,176:546],1,median)
+median.recurrent=apply(mergevstMat[,547:549],1,median)
+median.normal=apply(mergevstMat[,c(1:175, 550:599)], 1, median)
+
 
 plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
 points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
@@ -225,36 +219,45 @@ dev.off()
 ```{r}
 pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_volcano_heatmap.pdf')
 
-volcanoplot(efit, coef=1, names=as.character(gene_names[rownames(efit),1]), highlight = 100, main='Primary Tumour vs. Normal')
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1,"logFC"],-log10(hit_table1[hitlist1,"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
   
-volcanoplot(efit, coef=2, names=as.character(gene_names[rownames(efit),2]), highlight = 100, main='Recurrent Tumour vs. Normal') 
-  abline(h=-log10(0.05), lty=3, col='red')
-  abline(v=-1, lty=3, col='red')
-  abline(v=1, lty=3, col='red')
+quartz()
+plot(hit_table2$logFC,-log10(hit_table2$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Recurrent Tumour (Voom)')
+points(hit_table2[hitlist2,"logFC"],-log10(hit_table2[hitlist2,"adj.P.Val"]),cex=0.4,col="cyan")
+text(hit_table2[1:100,]$logFC,-log10(hit_table2[1:100,]$adj.P.Val), labels= gene_names[hitlist2[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
   
-heatmap.2(lcpm[hits,], trace = 'none', col=hmcol, Colv=FALSE)
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour')
+heatmap.2(lcpm[hitlist2[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Recurrent Tumour')
 
 dev.off()
 ```
 
 ```{r}
 pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_qqplot.pdf')
+
 qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
 qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
-qqnorm(log2(dge$counts+1)[,639], main = 'Normal Q-Q Plot (TCGA Sample 1)')
-qqnorm(log2(dge$counts+1)[,640], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+qqnorm(log2(dge$counts+1)[,598], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,599], main = 'Normal Q-Q Plot (TCGA Sample 2)')
 
 dev.off()
 ```
 
 ```{r}
 pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_PVA_MDS2.pdf')
+
 plot(voompca2$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, main = 'PCA Plot - EdgreR (GTEX/TCGA normals = Separate)')
 text(voompca2$x,as.character(coldata$Batch),cex=0.3,pos=1)
 text(voompca2$x,as.character(colnames(v2$E)),cex=0.3,pos = 3)
+
 
 plotMDS(efit2, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - EdgreR (GTEX/TCGA normals = Separate)')
 legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
@@ -327,7 +330,7 @@ dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/vst_heatmap.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_vst_heatmap.pdf')
 
 heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA')
 
@@ -346,7 +349,7 @@ for (i in 2:(length(condition_list))){
   print(paste('(SVA) Comparing', normal, 'vs.', compare))
   
   res=results(ddssva, contrast = c('Sample_Type', normal, compare))
-  res=res[order(res$padj),]
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
   
   hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
   
@@ -357,15 +360,17 @@ for (i in 2:(length(condition_list))){
       hits=hits[1:max_display_hits]
     }
     
+ 
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(SVA)'), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
-  text(res[hits,]$log2FoldChange,-log10(res[hits,]$padj), labels = gene_names[hits,]$GeneName, pos=3, cex = 0.4)
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
   abline(h=-log10(0.05), lty=3, col='red')
   abline(v=-1, lty=3, col='red')
   abline(v=1, lty=3, col='red')
 
+  
 
-  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
   
   } else {
     print(paste("No Results for ",compare))
