@@ -629,3 +629,62 @@ tfit=treat(efit, lfc = log2(0.7))
 
 
 #hits=rownames(topTable(efit,number=100))
+
+
+
+#Compare Primary Tumour & Recurrent Tumour to TCGA Normals and to GTEX Normals Separately
+```{r}
+
+#Readjust Conditions Vectors to distinguish between GTEX and TCGA Normals - This will allow us to compare effect of comparing each individually
+conds_origin=as.character(conds)
+conds_origin[1:175]=rep("Normal_GTEX",175)
+conds_origin[547:596]=rep("Normal_TCGA",58)
+conds_origin=as.factor(conds_origin)
+
+
+#Design changes to reflect changes in conds > conds_origin
+design2=model.matrix(~0+conds_origin+batch)
+contr.matrix2=makeContrasts(conds_originPrimary_Tumor-conds_originNormal_TCGA, conds_originPrimary_Tumor-conds_originNormal_GTEX, levels = colnames(design2))
+
+quartz()
+v2=voom(dge, design, plot = T)
+
+vfit2=lmFit(v2, design2)
+vfit2=contrasts.fit(vfit2, contrasts = contr.matrix2)
+efit2=eBayes(vfit2)
+
+
+
+#PCA Plot
+voompca2=prcomp(t(v2$E))
+quartz()
+plot(voompca2$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, main = 'PCA Plot - EdgreR (GTEX/TCGA normals = Separate)')
+text(voompca2$x,as.character(coldata$Batch),cex=0.3,pos=1)
+text(voompca2$x,as.character(colnames(v2$E)),cex=0.3,pos = 3)
+
+
+#SA Plot
+quartz()
+plotSA(efit2, main='Mean-Variance Trend - EdgreR (GTEX/TCGA normals = Separate)')
+
+
+#MDS Plot
+quartz()
+plotMDS(efit2, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - EdgreR (GTEX/TCGA normals = Separate)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit2))
+
+#Plot similarities between comparisons
+plot(topTable(efit2,coef=1,number=1000000000000000)$logFC,topTable(efit2,coef=2,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. TCGA Normals'))
+abline(h=0)
+abline(v=0)
+abline(a=0,b=1, lty=1, col='red')
+
+plot(topTable(efit2,coef=2,number=1000000000000000)$logFC,topTable(efit2,coef=4,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. GTEX Normals'))
+abline(h=0)
+abline(v=0)
+abline(a=0,b=1, lty=1, col='red')
+```
