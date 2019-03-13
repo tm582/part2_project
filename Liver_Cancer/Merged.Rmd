@@ -78,12 +78,12 @@ names(batch_colours)=unique(batch)
 
 ```
 
-##Save initial GTEX workspace & set up plot save
+#Save initial GTEX workspace
 ```{r}
 save.image("~/Desktop/part2_project/Liver_Cancer/merged_initial.RData")
 ```
 
-##DESeq Analysis
+##DESeq2
 
 #ColData object produced - Inlcuding Batch Effect
 ```{r}
@@ -110,7 +110,7 @@ mergedds=estimateDispersions(mergedds)
 ```
 
 
-#Data normalisation - Using merged data
+#Data normalisation
 ```{r}
 mergenormcounts <- counts(mergedds, normalized=TRUE)
 mergerawcounts=counts(mergedds,normalized=FALSE)
@@ -124,11 +124,9 @@ legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
 barplot(colSums(counts(mergedds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - DESeq2')
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
-
 ```
 
-
-#Disperison Pot - merged data
+#Disperison Pot
 ```{r}
 mergedds=nbinomWaldTest(mergedds)
 counts_table=counts(mergedds, normalized=TRUE)
@@ -152,38 +150,17 @@ heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow 
 
 ```
 
-#Biomarkers (Merged)
-
-```{r}
-biomarkers = c('ENSG00000081051','ENSG00000147257', 'ENSG00000110492', 'ENSG00000135052', 'ENSG00000118785')
-biomarkers.mat=mergevstcounts[biomarkers,]
-biomarkers.mat=biomarkers.mat[,order(colnames(biomarkers.mat))]
-
-conds_origin=as.character(conds)
-conds_origin[1:175]=rep("Normal_GTEX",175)
-conds_origin[547:596]=rep("Normal_TCGA",58)
-conds_origin=as.factor(conds_origin)
-
-cond_origin_cols=brewer.pal(length(unique(conds_origin)), 'Pastel2')
-
-quartz()
-
-heatmap.2(biomarkers.mat, trace='none', Colv = F, ColSideColors = cond_colours[conds[order(conds)]], labRow = gene_names[biomarkers,]$GeneName, main='Heatmap of VST counts for HCC Biomarkers')
-
-quartz()
-heatmap.2(biomarkers.mat, trace='none', Colv = F, ColSideColors = cond_origin_cols[conds_origin[order(conds_origin)]], labRow = gene_names[biomarkers,]$GeneName, main='Heatmap of VST counts for HCC Biomarkers')
-
-```
-
-#PCA Plots & Heatmaps - merged data
+#PCA Plots
 ```{r}
 #Prcomp PCA
 mergepca = prcomp(t(assay(mergevsd)))
 
-mergepca.df = mergepca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+mergepca.df = mergepca$x[, c(1,2,3)]
+
 # Percentage explained by each component
 percentages = round(mergepca$sdev^2 / sum(mergepca$sdev^2) * 100)[1:3]
 percentages = paste(paste0(colnames(mergepca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+
 mergepca.df = data.frame(mergepca.df, Condition = mergedds$Sample_Type, Batch = mergedds$Batch)
 
 quartz()
@@ -200,7 +177,6 @@ ggplot(mergepca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
 ```
 
 #Rtsne
-PCA plots shows better seapartion between normals and tumour tissues than tsne plots. PCA plots will be used in other methods too.
 ```{r}
 set.seed(72)
 tsne = Rtsne(t(mergevstMat), perplexity = 30)
@@ -217,7 +193,7 @@ ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
 ```
 
 
-#Statistical Analysis - Merged Data
+#Statistical Analysis
 ```{r}
 p_threshold=0.01
 lfc_threshold=1.5
@@ -261,10 +237,8 @@ for (i in 2:(length(condition_list))){
 }
 ```
 
-
 #Medians
 ```{r}
-
 median.primary=apply(mergevstMat[,176:546],1,median)
 median.normal=apply(mergevstMat[,c(1:175, 547:596)], 1, median)
 
@@ -273,12 +247,10 @@ plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Mer
 points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
 text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
 abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
-
-
 ```
 
+#Up- and down-regulated significant gene lists
 ```{r}
-
 hits=((res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
 up=hits[hits$log2FoldChange>0,]
 up=rownames(up)
@@ -286,19 +258,18 @@ up=as.data.frame(gene_names[up,]$GeneName)
 down=hits[hits$log2FoldChange<0,]
 down=rownames(down)
 down=as.data.frame(gene_names[down,]$GeneName)
-
 ```
 
+#Save out workspace
 ```{r}
 save.image("~/Desktop/part2_project/Liver_Cancer/merged_DESeq.RData")
 ```
 
 
-##Voom Limma Approach - Using Si's code
+##Voom
 
 #Set-Up DGE Object
 ```{r}
-
 dge=DGEList(counts=mergedcounts)
 
 dge$samples$group=conds
@@ -330,7 +301,6 @@ plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling
 legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
 ```
   
-
 #Design including conditions and batch effect
 ```{r}
 #Design
@@ -365,11 +335,11 @@ dt = decideTests(tfit)
 summary(dt)
 ```
 
-```{r}
 #PCA Plot
+```{r}
 voompca = prcomp(t(v$E))
 
-voompca.df = voompca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+voompca.df = voompca$x[, c(1,2,3)]
 # Percentage explained by each component
 percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
 percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
@@ -385,8 +355,10 @@ ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
 	ylab(percentages[2]) +
   xlim(-220, 220) +
   ylim(-220, 210)
+```
 
 #Tsne
+```{r}
 voomtsne = Rtsne(t(cpm), perplexity = 30)
 voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group, Batch=dge$samples$batch)
 
@@ -398,11 +370,10 @@ ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
   stat_ellipse(aes(colour=Type),type = "t")+
   xlim(-25,25)+
   ylim(-30,25)
-
 ```
 
-```{r}
 #Extract top significant hits by adjusted p value and log fold change
+```{r}
 hit_table1=topTable(efit,coef=1,number=10000000000000)
 
 hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
@@ -424,7 +395,9 @@ quartz()
 heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
 
 heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = batch_colours[batch])
+```
 
+```{r}
 #Comparing distribution between TCGA and GTEX normals
 quartz()
 par(mfrow=c(2,2))
@@ -435,29 +408,18 @@ qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
 
 apply(dge$counts, 2, median)
 
-#Distributions look similar betwen normals suggesting that the depth difference may account for the difficulty with comparisons. Downsamplig programme may tackle this by introdcing noise to the GTEx data in an effort to reduce the overall median
 ```
 
-```{r}
-
-VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
-
-```
-
-
+Save out workspace
 ```{r}
 save.image("~/Desktop/part2_project/Liver_Cancer/merged_edger.RData")
 ```
 
 
-
-
-
 ##SVA
 
-#SVA Normalisation
+#Design with surrogate variables
 ```{r}
-          
 #Removing hidden batch effects using SVA
 DESeqdds=DESeq(mergedds)
 dat=counts(DESeqdds,normalized=T)
@@ -496,12 +458,9 @@ ddssva = DESeqdds
 ddssva$SV1= svseq$sv[,1] 
 
 design(ddssva)= ~ SV1 + Sample_Type
-
-
 ```
 
-
-#Data normalisation - SVA
+#Data normalisation
 ```{r}
 svanormcounts <- counts(ddssva, normalized=TRUE)
 svarawcounts=counts(ddssva,normalized=FALSE)
@@ -529,27 +488,24 @@ plotDispEsts(dds,main='Dispersion Plot - TCGA')
 
 #VST
 ```{r}
-#VST Normalisation of SVA
-
 svavsd <- varianceStabilizingTransformation(ddssva, blind = F)
 svavstMat <- assay(svavsd)
 svavstcounts <- svavstMat[order(apply(svavstMat,1,sum),decreasing =TRUE),]
 
 quartz()
 heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA', ColSideColors = cond_colours[conds])
-
 ```
 
-#PCA Plots & Heatmaps - SVA
-#Prcomp PCA
+#PCA Plots
 ```{r}
-
 svapca = prcomp(t(assay(svavsd)))
 
-svapca.df = svapca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+svapca.df = svapca$x[, c(1,2,3)]
+
 # Percentage explained by each component
 percentages = round(svapca$sdev^2 / sum(pca$sdev^2) * 100)[1:3]
 percentages = paste(paste(colnames(svapca.df), ":"),  paste(as.character(percentages), "%"), "variance", sep=" ")
+
 svapca.df = data.frame(svapca.df, Condition = ddssva$Sample_Type, Batch = ddssva$Batch, SV = ddssva$SV1)
 
 quartz()
@@ -580,7 +536,6 @@ ggplot(data = svatsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
 ```
 
 #Statistical Analysis - SVA
-
 ```{r}
 condition_list=levels(conds)
 
@@ -623,15 +578,8 @@ quartz()
 }
 ```
 
+#Up- and Down-regulated significant gene lists
 ```{r}
-
-SVAprimhits=as.data.frame(gene_names[hits,]$GeneName)
-
-```
-
-
-```{r}
-
 hits=((res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
 up=hits[hits$log2FoldChange>0,]
 up=rownames(up)
@@ -643,6 +591,8 @@ down=as.data.frame(gene_names[down,]$GeneName)
 saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/mergesva_down.RDS")
 saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/mergesva_up.RDS")
 ```
+
+#save workspace
 ```{r}
 save.image("~/Desktop/part2_project/Liver_Cancer/merged_sva.RData")
 ```
