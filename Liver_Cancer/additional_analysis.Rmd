@@ -2,7 +2,9 @@
 title: "additional_analysis"
 author: "Tara Morrison"
 date: "07/03/2019"
-output: word_document
+output:
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r}
@@ -796,9 +798,9 @@ save.image("~/Desktop/part2_project/Liver_Cancer/down_50.RData")
 
 
 
-#50% Downsample
+#75% Downsample
 
-#Load in original gtex matrix and downsample by 50%
+#Load in original gtex matrix and downsample by 75%
 ```{r}
 gtex=readRDS('GTEX.rds')
 
@@ -821,7 +823,8 @@ gtex75=downsampleMatrix(gtex, 0.25)
 ```{r}
 tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
 
-common_ids = intersect(rownames(gtex75),rownames(tcgarawcounts))
+tcganorm=
+common_ids = intersect(rownames(gtex75),rownames(tcganorm))
 
 gtex75  = gtex75[common_ids, ]
 
@@ -1102,3 +1105,188 @@ plot(tcga_hittable$logFC,gtex_hittable$logFC, title(main = 'Butterfly Plot', xla
 ```
 
 
+```{r}
+#nicer butterfly plot
+
+  scatter_data = as.data.frame(cbind(tcga_hittable$logFC,gtex_hittable$logFC))
+  colnames(scatter_data)=c("tcga","gtex")
+  rf <- colorRampPalette(rev(brewer.pal(9,"Spectral")))
+
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/butterfly_plot2.pdf')
+
+hexbinplot(tcga ~ gtex, data=scatter_data, aspect="1", xbins=500, cex.labels=1.0, cex.title=1.0, colramp=rf, xlim=c(-10,10),ylim=c(-10,10),panel=function(x, y, ...) 
+  { 
+  panel.hexbinplot(x, y, ...) + panel.abline(v=0, h=0, col="black", lwd=0.5, lty=2) +
+    panel.abline(lm(scatter_data$gtex ~ scatter_data$tcga),lwd=0.5,lty=1,col="red") 
+  } )
+
+dev.off()
+
+print(paste("Model R: ",as.numeric((lm(scatter_data$gtex ~ scatter_data$tcga))$coefficients[2])))
+print(paste("Correlation: Pearson ",cor(scatter_data$gtex,scatter_data$tcga,method = "pearson")))
+
+
+plot(density(scatter_data$tcga),col="red",main="LogFC Distribution")
+lines(density(scatter_data$gtex),col="blue")
+
+qqplot(scatter_data$tcga,scatter_data$gtex,main="QQPlot TCGA v GTEX",pch=19,col="darkblue",cex=0.4)
+abline(a=0,b=1,lwd=0.5,lty=2,col="red")
+
+
+```
+
+
+
+
+
+
+
+#50% Downsample - GTEx only
+
+#Load in original gtex matrix and downsample by 50%
+```{r}
+gtex=readRDS('GTEX.rds')
+
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+gtex=as.matrix(gtex)
+gtex50=downsampleMatrix(gtex, 0.5)
+```
+
+#Load in tcgarawcounts and merge the two
+```{r}
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+tcgarawcount=tcgarawcounts[,1:371]
+common_ids = intersect(rownames(gtex50),rownames(tcgarawcounts))
+
+gtex50  = gtex50[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
+```
+
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+```{r}
+mergedcounts=cbind(gtex50, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex50)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+
+#Set-Up DGE Object
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+dge$samples$batch=batch
+
+cpm=edgeR::cpm(dge)
+lcpm=edgeR::cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+```
+  
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds+batch)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+```
+
+```{r}
+gtex_hittable=(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+tcga_hittable=readRDS(file='~/Desktop/part2_project/Liver_Cancer/TCGAhittable.RDS')
+
+common_ids = intersect(rownames(gtex_hittable),rownames(tcga_hittable))
+
+gtex_hittable=gtex_hittable[common_ids,]
+tcga_hittable=tcga_hittable[common_ids,]
+
+scatter_data = as.data.frame(cbind(tcga_hittable$logFC,gtex_hittable$logFC))
+  colnames(scatter_data)=c("tcga","gtex")
+saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/down50voom_down.RDS")
+saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/down50voom_up.RDS")
+
+quartz()
+qqplot(scatter_data$tcga,scatter_data$gtex,main="QQPlot TCGA v GTEX",pch=19,col="darkblue",cex=0.4)
+abline(a=0,b=1,lwd=0.5,lty=2,col="red")
+
+rf <- colorRampPalette(rev(brewer.pal(9,"Spectral")))
+
+hexbinplot(tcga ~ gtex, data=scatter_data, aspect="1", xbins=500, cex.labels=1.0, cex.title=1.0, colramp=rf, xlim=c(-10,10),ylim=c(-10,10),panel=function(x, y, ...) 
+  { 
+  panel.hexbinplot(x, y, ...) + panel.abline(v=0, h=0, col="black", lwd=0.5, lty=2) +
+    panel.abline(lm(scatter_data$gtex ~ scatter_data$tcga),lwd=0.5,lty=1,col="red") 
+  } )
+print(paste("Model R: ",as.numeric((lm(scatter_data$gtex ~ scatter_data$tcga))$coefficients[2])))
+print(paste("Correlation: Pearson ",cor(scatter_data$gtex,scatter_data$tcga,method = "pearson")))
+
+```
+
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/gtexonlydown_50.RData")
+
+```
