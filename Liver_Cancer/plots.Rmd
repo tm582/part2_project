@@ -7,8 +7,7 @@ output: pdf_document
 
 ##TCGA ONLY
 ```{r}
-pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_barplots.pdf')
-
+pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/tcga_deseq_barplots.pdf')
 
 barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts - TCGA', names.arg =conds)
 legend("topleft",levels(conds),cex=0.5,fill=cond_colours)
@@ -20,54 +19,42 @@ dev.off()
 ```
 
 ```{r}
-pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_dispersion.pdf')
+pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/tcga_deseq_dispersion.pdf')
 
 plotDispEsts(dds,main='Dispersion Plot - TCGA')
 
-heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts - TCGA')
+heatmap.2(cor(vstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = pdata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the VST Counts - TCGA', Rowv = F, ColSideColors = cond_colours[conds])
 
 dev.off()
 ```
 
 ```{r}
-pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_PCA_tsne.pdf')
+pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/tcga_deseq_PCA_tsne.pdf')
 
-pca=prcomp(t(assay(vsd)))
-
-plot(pca$x, main='PCA Variance Stabilised - TCGA', pch=21, col='black', bg=cond_colours[conds],cex=1)
-text(pca$x, as.character(conds), pos=1, cex=0.4)
-summary(pca)
+ggplot(pca.df, aes(x=PC1,y=PC2, colour = Condition))+
+	geom_point(size = 4)+
+  scale_color_manual(values=cond_colours[conds])+
+  ggtitle("PCA1 vs PCA2 (TCGA Only)")+
+  stat_ellipse(aes(colour= pca.df$Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200,220) +
+  ylim(-200, 210)
 
 ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Type))+
   geom_point(size=4)+
-  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
+  ggtitle("T-sne (TCGA - DESeq)")+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))+
+  stat_ellipse(aes(colour= tsne.df$Type),type = "t")+
+  xlim(-55,60) +
+  ylim(-60,60)
 
 dev.off()
 ```
 
 
 ```{r}
-pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/TCGA_only_volcano_heatmap.pdf')
-
-for (i in 2:(length(condition_list))){
- 
-  normal=condition_list[1]
-  compare=condition_list[i]
-
-  print(paste('Comparing', normal, 'vs.', compare))
-  
-  res=results(dds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(abs(res$log2FoldChange), decreasing = T),]
-  
-  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
-
-   print(paste("Found: ",length(hits)," Statistical hits"))
-   
-  if (length(hits) != 0){
-    if (length(hits)>max_display_hits){
-      hits=hits[1:max_display_hits]
-    }
-    
+pdf(file = '~/Desktop/part2_project/Liver_Cancer/plots/tcga_deseq_volcano_heatmap.pdf')
 
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
@@ -77,79 +64,246 @@ for (i in 2:(length(condition_list))){
   abline(v=1, lty=3, col='red')
  
 
-  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste('Heatmap Sig. Hits for', compare),labCol = conds, cexCol = 0.5) 
-  } else {
-    print(paste("No Results for ",compare))
-  }
-  
-}
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='row',main=paste('Heatmap Sig. Hits for', compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+
+
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
 dev.off()
 ```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/TCGA_biomarkers.pdf')
+
+heatmap.2(biomarkers, trace='none', Colv = F, ColSideColors = cond_colours[conds], labRow = gene_names[c(rownames(biomarkers)),]$GeneName, main='Heatmap of VST counts for HCC Biomarkers')
+
+dev.off()
+
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_voom_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+dev.off()
+```
+
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_voom_mds_heatmap.pdf')
+
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+heatmap.2(cor(v$E),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - TCGA (Voom)', Rowv = F, ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_voom_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (TCGA -Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200,220) +
+  ylim(-200, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  ggtitle("T-sne (TCGA-Voom)")+
+  scale_color_manual(values=unique(cond_colours[conds])) +
+  xlim(-30,30) +
+  ylim(-15,15)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_voom_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_sva_sv.pdf')
+
+stripchart(svseq$sv[,1] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV1")
+abline(h=0)
+
+stripchart(svseq$sv[,2] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV2")
+abline(h=0)
+
+stripchart(svseq$sv[,3] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV3")
+abline(h=0)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_sva_barplot.pdf')
+
+barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+
+barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - SVA')
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_sva_dispersion_heatmap.pdf')
+
+plotDispEsts(dds,main='Dispersion Plot - GTEx')
+
+heatmap.2(cor(svavstcounts),trace="none",labRow = conds, cexRow = 0.6, labCol = conds, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST counts- SVA', ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_sva_pca_tsne.pdf')
+
+ggplot(svapca.df, aes(x=PC1,y=PC2, colour = Condition)) + 
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (TCGA - SVA)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+ggplot(data = svatsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  scale_color_manual(values=unique(cond_colours[svatsne.df$Type]))+
+  ggtitle("T-sne (TCGA - SVA)")+
+  xlim(-30, 30) +
+  ylim(-20, 20)
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/tcga_sva_volcano_heatmap.pdf')
+    
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(SVA)'), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
+
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol, dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+  
+heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:250,]),]+1),col=hmcol,trace="none", ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##MERGED
 ```{r}
 
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/DESeq_barplot.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_deseq_barplot.pdf')
 
 barplot(colSums(counts(mergedds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
-boxplot(log2(counts(mergedds, normalized=FALSE)+1), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
-
 barplot(colSums(counts(mergedds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - DESeq2')
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
 
-boxplot(log2(counts(mergedds, normalized=TRUE)+1), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - DESeq2')
-
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/DESeq_dispersion.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_deseq_dispersion.pdf')
 
 plotDispEsts(mergedds,main='Dispersion Plot - DESeq2')
 
-heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - DESeq2')
+heatmap.2(cor(mergevstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - DESeq2', ColSideColors = cond_colours[conds])
 
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/DESeq_PCA_tsne.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_deseq_PCA_tsne.pdf')
 
-plot(mergepca$x, main='PCA Variance Stabilised for Merged Data - DESeq2', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
-text(mergepca$x, as.character(conds), pos=1, cex=0.4)
+ggplot(mergepca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data - DESeq)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200,220) +
+  ylim(-200, 210)
 
 ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
   geom_point(size=4)+
-  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))
+  stat_ellipse(aes(colour=Type),type = "t")+
+  ggtitle("R-tsne (Merged Data - DESeq)")+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))+
+  xlim(-30, 30) +
+  ylim(-32, 30)
 
 dev.off()  
 ```
 
 ```{r}
 
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/DESeq_volcano_heatmap.pdf')
-
-for (i in 2:(length(condition_list))){
- 
-  normal=condition_list[1]
-  compare=condition_list[i]
-
-  print(paste('(GTEX/TCGA Merged) Comparing', normal, 'vs.', compare))
-  
-  res=results(mergedds, contrast = c('Sample_Type', normal, compare))
-  res=res[order(abs(res$log2FoldChange), decreasing = T),]
-  
-  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
-  
-   print(paste("Found: ",length(hits)," Statistical hits"))
-   
-  if (length(hits) != 0){
-    if (length(hits)>max_display_hits){
-      hits=hits[1:max_display_hits]
-    }
-    
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_deseq_volcano_heatmap.pdf')
 
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEX/TCGA Merged)'), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
@@ -159,15 +313,17 @@ for (i in 2:(length(condition_list))){
   abline(v=1.5, lty=3, col='red')
  
  
-  heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
-  } else {
-    print(paste("No Results for ",compare))
-  }
-}
+heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds])
+heatmap.2(mergevstMat[hits,],trace='none',col=hmcol,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = batch_colours[batch])
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_deseq_medians.pdf')  
 
 median.primary=apply(mergevstMat[,176:546],1,median)
-median.recurrent=apply(mergevstMat[,547:549],1,median)
-median.normal=apply(mergevstMat[,c(1:175, 550:599)], 1, median)
+median.normal=apply(mergevstMat[,c(1:175, 547:596)], 1, median)
 
 
 plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
@@ -175,116 +331,88 @@ points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
 text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
 abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
 
-
-plot(median.normal,median.recurrent, main="Normal vs. Recurrent_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
-points(median.normal[hits],median.recurrent[hits], pch=21, col='turquoise1')
-text(median.normal[hits],median.recurrent[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
-abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
-
 dev.off()
 ```
 
 
-##EdgeR Plots
+##Voom Plots
 
 ```{r}
 
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_barplot.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_voom_barplot.pdf')
 
-boxplot(log2(dge$counts+1), las=2, col=cond_colours[conds], main="Pre Normalised Data", ylab="Log-cpm", cex.axis=0.5)
-barplot(log2(dge$counts+1), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
 
-boxplot(lcpm, las=2, col=cond_colours[conds], main="Normalised Data - EdgeR",ylab="Log-cpm")
-barplot(lcpm, las=2, col=cond_colours[conds], main="Normalised Data - EdgeR",ylab="Log-cpm")
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
 
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_PCA_MDS.pdf')
-
-plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot dge - EdgeR')
-legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
-
-plot(voompca$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, main='PCA Plot - EdgeR (conds+batch)')
-text(voompca$x,as.character(coldata$Batch),cex=0.3,pos=1)
-text(voompca$x,as.character(colnames(v$E)),cex=0.3,pos = 3)
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_voom_mds_heatmap.pdf')
 
 plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot v - EdgeR (conds+batch)')
 legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
 
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - Merged (Voom)', Rowv = F, RowSideColors = cond_colours[conds])
+
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_volcano_heatmap.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_voom_PCA_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-25,25)+
+  ylim(-30,25)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_voom_volcano_heatmap.pdf')
 
 plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
-  points(hit_table1[hitlist1,"logFC"],-log10(hit_table1[hitlist1,"adj.P.Val"]),cex=0.4,col="cyan")
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
   text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
   abline(h=-log10(p_threshold), lty=3, col='red')
   abline(v=-lfc_threshold, lty=3, col='red')
   abline(v=lfc_threshold, lty=3, col='red')
   
-quartz()
-plot(hit_table2$logFC,-log10(hit_table2$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Recurrent Tumour (Voom)')
-points(hit_table2[hitlist2,"logFC"],-log10(hit_table2[hitlist2,"adj.P.Val"]),cex=0.4,col="cyan")
-text(hit_table2[1:100,]$logFC,-log10(hit_table2[1:100,]$adj.P.Val), labels= gene_names[hitlist2[1:100],]$GeneName, pos=3, cex=0.4)
-  abline(h=-log10(p_threshold), lty=3, col='red')
-  abline(v=-lfc_threshold, lty=3, col='red')
-  abline(v=lfc_threshold, lty=3, col='red')
-  
-heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour')
-heatmap.2(lcpm[hitlist2[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Recurrent Tumour')
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
 
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = batch_colours[batch])
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_qqplot.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_voom_qqplot.pdf')
 
 qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
 qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
-qqnorm(log2(dge$counts+1)[,598], main = 'Normal Q-Q Plot (TCGA Sample 1)')
-qqnorm(log2(dge$counts+1)[,599], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+qqnorm(log2(dge$counts+1)[,595], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
 
 dev.off()
 ```
-
-```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_PVA_MDS2.pdf')
-
-plot(voompca2$x, pch=c(21,24)[batch], bg=cond_colours[conds], cex=1, main = 'PCA Plot - EdgreR (GTEX/TCGA normals = Separate)')
-text(voompca2$x,as.character(coldata$Batch),cex=0.3,pos=1)
-text(voompca2$x,as.character(colnames(v2$E)),cex=0.3,pos = 3)
-
-
-plotMDS(efit2, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - EdgreR (GTEX/TCGA normals = Separate)')
-legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
-
-dev.off()
-```
-
-```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/EdgeR_butterfly2.pdf')
-
-plot(topTable(efit2,coef=1,number=1000000000000000)$logFC,topTable(efit2,coef=2,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. TCGA Normals'))
-abline(h=0)
-abline(v=0)
-abline(a=0,b=1, lty=1, col='red')
-
-plot(topTable(efit2,coef=2,number=1000000000000000)$logFC,topTable(efit2,coef=4,number=1000000000000000)$logFC, title(main='Butterfly Plot for Primary Tumour vs. GTEX Normals'))
-abline(h=0)
-abline(v=0)
-abline(a=0,b=1, lty=1, col='red')
-
-dev.off()
-```
-
 
 ##SVA plots
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_sv.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_sva_sv.pdf')
 
 stripchart(svseq$sv[,1] ~ DESeqdds$Batch,vertical=TRUE,main="SV1")
 abline(h=0)
@@ -305,62 +433,287 @@ dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_barplot.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_sva_barplot.pdf')
 
 barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
 legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
-boxplot(log2(counts(ddssva, normalized=FALSE)+1), col=cond_colours[conds], las=2,cex.axis=0.5,main='Pre Normalised Counts')
 
 barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - SVA')
 legend("topleft",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
-boxplot(log2(counts(ddssva, normalized=TRUE)+1), col=cond_colours[conds], las=2,cex.axis=0.5,main='Post Normalised Counts - SVA')
 
 dev.off()
 ```
 
 ```{r}
 
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_pca.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_sva_pca_tsne.pdf')
 
+ggplot(svapca.df, aes(x=PC1,y=PC2, colour = Condition ,  shape = Batch )) + 
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data-SVA)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
 
-plot(svapca$x, main='PCA Variance Stabilised for SVA', pch=c(21,24)[batch], col='black', bg=cond_colours[conds], cex=1)
-text(svapca$x, as.character(conds), pos=1, cex=0.4)
+ggplot(data = svatsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-SVA)")+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type])) +
+  xlim(-30, 30) +
+  ylim(-25, 25)
 
 dev.off()
 ```
 
 ```{r}
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_vst_heatmap.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_sva_vst_heatmap.pdf')
 
-heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA')
+heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA', ColSideColors = cond_colours[conds])
 
 dev.off()
 ```
 
 ```{r}
 
-pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/sva_volcano_heatmap.pdf')
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/merged_sva_volcano_heatmap.pdf')
 
-for (i in 2:(length(condition_list))){
  
-  normal=condition_list[1]
-  compare=condition_list[i]
+plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(SVA)'), pch=19, cex=0.2)
+points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
 
-  print(paste('(SVA) Comparing', normal, 'vs.', compare))
   
-  res=results(ddssva, contrast = c('Sample_Type', normal, compare))
-  res=res[order(abs(res$log2FoldChange), decreasing = T),]
+heatmap.2(svavstMat[hits,],trace='none',col=hmcol, dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+heatmap.2(svavstMat[hits,],trace='none',col=hmcol,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = batch_colours[batch])
   
-  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
-  
-   print(paste("Found: ",length(hits)," Statistical hits"))
-   
-  if (length(hits) != 0){
-    if (length(hits)>max_display_hits){
-      hits=hits[1:max_display_hits]
-    }
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##GTEx
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_deseq_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_deseq_dispersion.pdf')
+
+plotDispEsts(dds,main='Dispersion Plot - DESeq2 (GTEx Only)')
+
+heatmap.2(cor(vstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST (GTEx Normals Only) - DESeq2', ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_deseq_pca_tsne.pdf')
+
+ggplot(pca.df, aes(x=PC1,y=PC2, colour = Type)) + 
+	geom_point(size = 4) +
+  scale_colour_manual(values =  cond_colours[pca.df$Type])+
+	stat_ellipse(aes(colour= pca.df$Type),type = "t") +
+	ggtitle("PCA1 vs PCA2 (GTEx - DESeq)")+
+	xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  ggtitle("T-sne (GTEx - DESeq)")+
+  stat_ellipse(aes(colour= pca.df$Type),type = "t") +
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))+
+  xlim(-30, 30) +
+  ylim(-20,20)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_deseq_volcano_heatmap.pdf')
     
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEx Only)'), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
  
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+
+
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_barplot.pdf')
+
+barplot(log2(dge$counts+1), las=2, main='Pre Normalised Data - Voom', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(lcpm, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm")
+
+dev.off()
+```
+
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_mds_heatmap.pdf')
+
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - GTEx (Voom)', Rowv = F, ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (GTEx only-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  scale_color_manual(values=unique(cond_colours[conds])) +
+  xlim(-25, 25) +
+  ylim(-25, 20)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1,"logFC"],-log10(hit_table1[hitlist1,"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_sva_sv.pdf')
+
+stripchart(svseq$sv[,1] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV1")
+abline(h=0)
+
+stripchart(svseq$sv[,2] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV2")
+abline(h=0)
+
+stripchart(svseq$sv[,3] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV3")
+abline(h=0)
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_sva_barplot.pdf')
+
+barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - SVA')
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_sva_dispersion_heatmap.pdf')
+
+plotDispEsts(dds,main='Dispersion Plot - GTEx')
+
+heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA', ColSideColors = cond_colours[conds])
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_sva_pca_tsne.pdf')
+
+ggplot(svapca.df, aes(x=PC1,y=PC2, colour = Condition)) + 
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (GTEx-SVA)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+ggplot(data = svatsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[svatsne.df$Type]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  ggtitle("T-sne (GTEx-SVA)") +
+  xlim(-30, 30) +
+  ylim(-25, 25)
+
+dev.off()
+```
+
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_sva_volcano_heatmap.pdf')
+    
   plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(SVA)'), pch=19, cex=0.2)
   points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
   text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
@@ -369,17 +722,255 @@ for (i in 2:(length(condition_list))){
   abline(v=1, lty=3, col='red')
 
   
-
-  heatmap.2(svavstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5) 
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol, dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
   
-  } else {
-    print(paste("No Results for ",compare))
-  }
-  
-}
 
-heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:100,]),]+1),col=hmcol,trace="none")
+heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:250,]),]+1),col=hmcol,trace="none", ColSideColors = cond_colours[conds])
 
 dev.off()
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##Downsample25
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data (Downsampled 25%)', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data (Downsampled 25%)",ylab="Log-cpm", cex.axis = 0.5)
+
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down25_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Downsampled 25%)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Downsampled 25%)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-20,27)+
+  ylim(-30,25)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down25_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Downsampled 25%)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 25%)', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 25%)', ColSideColors = batch_colours[batch])
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+##Downsample33
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/gtex_voom_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data (Downsampled 33%)', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data (Downsampled 33%)",ylab="Log-cpm", cex.axis = 0.5)
+
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down33_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Downsampled 33%)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Downsampled 33%)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-20,27)+
+  ylim(-25,30)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down33_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Downsampled 33%)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+  heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 33%)', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 33%)', ColSideColors = batch_colours[batch])
+dev.off()
+```
+
+
+
+
+
+##Downsample50
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down50_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data (Downsampled 50%)', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data (Downsampled 50%)",ylab="Log-cpm", cex.axis = 0.5)
+
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down50_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Downsampled 50%)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Downsampled 50%)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-20,25)+
+  ylim(-30,25)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down50_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Downsampled 50%)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+  heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 50%)', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 50%)', ColSideColors = batch_colours[batch])
+
+dev.off()
+```
+
+
+##Downsample75
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down75_barplot.pdf')
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data (Downsampled 75%)', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data (Downsampled 75%)",ylab="Log-cpm", cex.axis = 0.5)
+
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down75_pca_tsne.pdf')
+
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Downsampled 75%)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Downsampled 75%)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-25,25)+
+  ylim(-20,30)
+
+dev.off()
+```
+
+```{r}
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/down75_volcano_heatmap.pdf')
+
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Downsampled 75%)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 75%)', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 75%)', ColSideColors = batch_colours[batch])
+
+dev.off()
+
+```

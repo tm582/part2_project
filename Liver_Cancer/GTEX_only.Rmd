@@ -1,0 +1,595 @@
+---
+title: "GTEx only"
+author: "Tara Morrison"
+date: "06/03/2019"
+output: word_document
+---
+
+```{r}
+
+setwd("~/Desktop/part2_project/Liver_Cancer")
+
+library(RColorBrewer)
+library(gplots)
+library(ggplot2)
+library(DESeq2)
+library(Rtsne)
+library(pca3d)
+library(limma)
+library(genefilter)
+library(sva)
+library(edgeR)
+library(statmod)
+library(reticulate)
+library(VennDiagram)
+```
+
+
+## Load in GTEX Data
+```{r}
+
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+tcgarawcounts=tcgarawcounts[,1:371]
+
+gtex=readRDS('GTEX.rds')
+
+# We obtained a simple table from the raw GTEX sample attributes using:
+# cut -f 1,6,7 gtex_sample_attributes.txt  | sort -k2 > gtex_simple_samples.txt
+# included: Sample IDs, Tissue, Tissue Description
+
+#All GTEX Samples for all Tissue types
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+#Need to remove decimal in gtex gene names after initial input
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+
+common_ids = intersect(rownames(gtex),rownames(tcgarawcounts))
+
+gtex  = gtex[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+```
+
+```{r}
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+
+mergedcounts=cbind(gtex, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+gene_names= gene_names[rownames(ddsHTSeq),]
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+
+
+```{r}
+
+save.image("~/Desktop/part2_project/Liver_Cancer/GTEXinitial.Rdata")
+
+```
+
+```{r}
+coldata=as.data.frame(conds)
+coldata$batch=batch
+
+colnames(coldata)=c("Sample_Type", 'Batch')
+```
+
+```{r}
+ddsHTSeq<-DESeqDataSetFromMatrix(countData=mergedcounts,colData=coldata,design=~Sample_Type)
+
+dds=estimateSizeFactors(ddsHTSeq)
+dds=estimateDispersions(dds)
+```
+
+#Data normalisation
+```{r}
+normcounts <- counts(dds, normalized=TRUE)
+rawcounts=counts(dds,normalized=FALSE)
+log2counts=log2(normcounts+1)
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(colSums(counts(dds, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+barplot(colSums(counts(dds, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - DESeq2')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+```
+
+
+
+#Disperison Pot - merged data
+```{r}
+dds=nbinomWaldTest(dds)
+counts_table=counts(dds, normalized=TRUE)
+
+quartz()
+plotDispEsts(dds,main='Dispersion Plot - DESeq2 (GTEx Only)')
+```
+
+
+#VST - merged data
+```{r}
+#blind added - to ignore variation due to batch effect
+#If many of genes have large differences in counts due to the experimental design, it is important to set blind=FALSE for downstream analysis.
+
+vsd <- varianceStabilizingTransformation(dds, blind = F)
+vstMat <- assay(vsd)
+vstcounts <- vstMat[order(apply(vstMat,1,sum),decreasing =TRUE),]
+
+quartz()
+heatmap.2(cor(vstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST (GTEx Normals Only) - DESeq2', ColSideColors = cond_colours[conds])
+
+```
+
+
+#PCA Plots & Heatmaps - merged data
+
+```{r}
+
+#Run PCA and calculate %s for first 3 components
+#PCA percentages
+
+pca=prcomp(t(assay(vsd)))
+pca.df = pca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+
+# Percentage explained by each component
+percentages = round(pca$sdev^2 / sum(pca$sdev^2) * 100)[1:3]
+percentages <- paste(paste(colnames(pca.df), ":"),  paste(as.character(percentages), "%"), "variance", sep=" ")
+pca.df = data.frame(pca.df, Type = dds$Sample_Type)
+
+#PCA with centroids
+quartz()
+ggplot(pca.df, aes(x=PC1,y=PC2, colour = Type)) + 
+	geom_point(size = 4) +
+  scale_colour_manual(values =  cond_colours[pca.df$Type])+
+	stat_ellipse(aes(colour= pca.df$Type),type = "t") +
+	ggtitle("PCA1 vs PCA2 (GTEx - DESEq)")+
+	xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+```
+
+
+#Rtsne
+PCA plots shows better seapartion between normals and tumour tissues than tsne plots. PCA plots will be used in other methods too.
+```{r}
+set.seed(72)
+tsne = Rtsne(t(vstMat), perplexity = 30)
+tsne.df=data.frame(tsne.1=tsne$Y[,1], tsne.2=tsne$Y[,2], Type=as.factor(dds$Sample_Type))
+
+quartz()
+ggplot(data = tsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  ggtitle("T-sne (GTEx - DESeq")+
+  stat_ellipse(aes(colour= pca.df$Type),type = "t") +
+  scale_color_manual(values=unique(cond_colours[tsne.df$Type]))+
+  xlim(-30, 30) +
+  ylim(-20,20)
+```
+
+
+#Statistical Analysis
+```{r}
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250 
+
+condition_list=levels(conds)
+
+for (i in 2:(length(condition_list))){
+ 
+  normal=condition_list[1]
+  compare=condition_list[2]
+
+  print(paste('(GTEx Only) Comparing', normal, 'vs.', compare))
+  
+  res=results(dds, contrast = c('Sample_Type', normal, compare))
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
+  
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+   print(paste("Found: ",length(hits)," Statistical hits"))
+   
+  if (length(hits) != 0){
+    if (length(hits)>max_display_hits){
+      hits=hits[1:max_display_hits]
+    }
+    
+  quartz()
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(GTEx Only)'), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-1.5, lty=3, col='red')
+  abline(v=1.5, lty=3, col='red')
+ 
+  quartz()
+  heatmap.2(vstMat[hits,],trace='none',col=hmcol,Colv=FALSE,dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+  } else {
+    print(paste("No Results for ",compare))
+  }
+}
+```
+
+
+#Medians
+```{r}
+
+median.primary=apply(vstMat[,176:546],1,median)
+median.normal=apply(vstMat[,1:175], 1, median)
+
+quartz()
+plot(median.normal,median.primary, main="Normal vs. Primary_Tumor (GTEX/TCGA Merged)", pch=19, col='darkblue', cex=0.4)
+points(median.normal[hits],median.primary[hits], pch=21, col='turquoise1')
+text(median.normal[hits],median.primary[hits],cex=0.4,pos=4,labels = gene_names[hits,]$GeneName)
+abline(a=0,b=1, col='red', lwd=2, cex=0.4, lty=2)
+```
+
+```{r}
+
+save.image("~/Desktop/part2_project/Liver_Cancer/GTEXdeseq.Rdata")
+
+```
+
+
+
+##Voom
+
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+
+cpm=cpm(dge)
+lcpm=cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+lcpm=cpm(dge, log=T)
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - GTEx (Voom)', Rowv = F, ColSideColors = cond_colours[conds])
+```
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend - Voom')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+#PCA & Tsne
+```{r}
+#PCA Plot
+voompca = prcomp(t(v$E))
+
+voompca.df = voompca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+# Percentage explained by each component
+percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
+percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+voompca.df = data.frame(voompca.df, Condition = dge$samples$group)
+
+quartz()
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (GTEx only-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+
+#Tsne
+voomtsne = Rtsne(t(cpm), perplexity = 30)
+voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group)
+
+quartz()
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  scale_color_manual(values=unique(cond_colours[conds])) +
+  xlim(-25, 25) +
+  ylim(-25, 20)
+```
+
+
+##Significant Hits
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+
+quartz()
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1,"logFC"],-log10(hit_table1[hitlist1,"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+```
+
+```{r}
+
+VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
+
+```
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/GTEXvoom.Rdata")
+```
+
+#SVA Design
+```{r}
+rm(lcpm)
+rm(cpm)
+rm(VOOMprimhits)
+rm(hit_table1)
+rm(hitlist1)
+rm(efit)
+rm(tfit)
+rm(vfit)
+rm(voompca)
+rm(v)
+rm(dge)
+```
+
+#Removing hidden batch effects using SVA
+```{r}
+DESeqdds=DESeq(dds)
+dat=counts(DESeqdds,normalized=T)
+idx=rowMeans(dat)>1
+dat=dat[idx,]
+
+mod=model.matrix(~Sample_Type, colData(DESeqdds))
+mod0=model.matrix(~1, colData(DESeqdds))
+
+n.sv = num.sv(dat,mod,method="leek") 
+
+svseq=svaseq(dat, mod, mod0, n.sv=542)
+
+quartz()
+par(mfrow=c(3,1))
+
+stripchart(svseq$sv[,1] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV1")
+abline(h=0)
+
+stripchart(svseq$sv[,2] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV2")
+abline(h=0)
+
+stripchart(svseq$sv[,3] ~ DESeqdds$Sample_Type,vertical=TRUE,main="SV3")
+abline(h=0)
+
+
+ddssva = DESeqdds
+
+ddssva$SV1= svseq$sv[,1] 
+
+design(ddssva)= ~ SV1 + Sample_Type
+
+```
+
+
+#Data normalisation - SVA
+```{r}
+svanormcounts <- counts(ddssva, normalized=TRUE)
+svarawcounts=counts(ddssva,normalized=FALSE)
+svalog2counts=log2(svanormcounts+1)
+
+quartz()
+par(mfrow=c(2,2))
+
+barplot(colSums(counts(ddssva, normalized=FALSE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Pre Normalised Counts')
+legend("topright",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+
+barplot(colSums(counts(ddssva, normalized=TRUE)), col=cond_colours[conds], las=2,cex.names=0.5,main='Post Normalised Counts - SVA')
+legend("topleft",levels(conds),cex=0.5,fill=cond_colours[levels(conds)])
+
+```
+
+```{r}
+ddssva=nbinomWaldTest(ddssva)
+
+counts_table=counts(dds, normalized=TRUE)
+
+quartz()
+plotDispEsts(dds,main='Dispersion Plot - GTEx')
+```
+
+#VST
+
+#VST Normalisation of SVA
+```{r}
+svavsd <- varianceStabilizingTransformation(ddssva, blind = F)
+svavstMat <- assay(svavsd)
+svavstcounts <- svavstMat[order(apply(svavstMat,1,sum),decreasing =TRUE),]
+
+quartz()
+heatmap.2(cor(svavstcounts),trace="none",labRow = coldata$Sample_Type, cexRow = 0.6, labCol = coldata$Sample_Type, cexCol = 0.6, col=hmcol, main = 'Heatmap of VST - SVA', ColSideColors = cond_colours[conds])
+```
+
+#PCA Plots & Heatmaps - SVA
+#Prcomp PCA
+```{r}
+svapca = prcomp(t(assay(svavsd)))
+
+svapca.df = svapca$x[, c(1,2,3)] #* -1 # if necessary flip coords for better visualisation
+# Percentage explained by each component
+percentages = round(svapca$sdev^2 / sum(pca$sdev^2) * 100)[1:3]
+percentages = paste(paste(colnames(svapca.df), ":"),  paste(as.character(percentages), "%"), "variance", sep=" ")
+svapca.df = data.frame(svapca.df, Condition = ddssva$Sample_Type)
+
+quartz()
+ggplot(svapca.df, aes(x=PC1,y=PC2, colour = Condition)) + 
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (GTEx-SVA)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-200, 220) +
+  ylim(-200, 210)
+
+```
+
+#Tsne
+```{r}
+svatsne = Rtsne(t(svavstMat), perplexity = 30)
+svatsne.df=data.frame(tsne.1=svatsne$Y[,1], tsne.2=svatsne$Y[,2], Type=as.factor(ddssva$Sample_Type))
+
+quartz()
+ggplot(data = svatsne.df, aes(tsne.1,  tsne.2, colour=Type))+
+  geom_point(size=4)+
+  scale_color_manual(values=unique(cond_colours[svatsne.df$Type]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  ggtitle("T-sne (GTEx-SVA)") +
+  xlim(-30, 30) +
+  ylim(-25, 25)
+```
+
+#Statistical Analysis - SVA
+```{r}
+condition_list=levels(conds)
+
+for (i in 2:(length(condition_list))){
+ 
+  normal=condition_list[1]
+  compare=condition_list[2]
+
+  print(paste('(SVA) Comparing', normal, 'vs.', compare))
+  
+  res=results(ddssva, contrast = c('Sample_Type', normal, compare))
+  res=res[order(abs(res$log2FoldChange), decreasing = T),]
+  
+  hits=(rownames(res[((res$padj<=p_threshold) & (abs(res$log2FoldChange)>=lfc_threshold) & (!is.na(res$padj))),]))
+  
+   print(paste("Found: ",length(hits)," Statistical hits"))
+   
+  if (length(hits) != 0){
+    if (length(hits)>max_display_hits){
+      hits=hits[1:max_display_hits]
+    }
+    
+  quartz()
+  plot(res$log2FoldChange,-log10(res$padj), ylab='-log10(Adjusted P-value)', xlab='log2 FoldChange', main=paste('Volcano Plot:', normal, 'vs.', compare,'(SVA)'), pch=19, cex=0.2)
+  points(res[hits,'log2FoldChange'],-log(res[hits,'padj'],10),pch=21,cex=0.4,col='turquoise1')
+  text(res[hits[1:100],]$log2FoldChange,-log10(res[hits[1:100],]$padj), labels = gene_names[hits[1:100],]$GeneName, pos=3, cex = 0.4)
+  abline(h=-log10(0.05), lty=3, col='red')
+  abline(v=-1, lty=3, col='red')
+  abline(v=1, lty=3, col='red')
+
+  
+quartz()
+  heatmap.2(svavstMat[hits,],trace='none',col=hmcol, dendrogram='col',main=paste("Heatmap Sig. Hits for", compare),labCol = conds, cexCol = 0.5, ColSideColors = cond_colours[conds]) 
+  
+  } else {
+    print(paste("No Results for ",compare))
+  }
+  
+}
+
+quartz()
+
+heatmap.2(log2(counts(ddssva,normalized=T)[rownames(res[1:250,]),]+1),col=hmcol,trace="none", ColSideColors = cond_colours[conds])
+```
+
+```{r}
+
+SVAprimhits=as.data.frame(gene_names[hits,]$GeneName)
+
+```
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/GTEXsva.Rdata")
+```
+
+
+

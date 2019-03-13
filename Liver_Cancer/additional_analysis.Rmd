@@ -1,0 +1,1104 @@
+---
+title: "additional_analysis"
+author: "Tara Morrison"
+date: "07/03/2019"
+output: word_document
+---
+
+```{r}
+library(DropletUtils)
+library(RColorBrewer)
+library(gplots)
+library(ggplot2)
+library(DESeq2)
+library(Rtsne)
+library(pca3d)
+library(limma)
+library(genefilter)
+library(sva)
+library(edgeR)
+library(statmod)
+library(reticulate)
+library(VennDiagram)
+library(gridExtra)
+library(gridGraphics)
+
+```
+
+
+##Venn Diagrams
+#Using significant up and down regualted genes from Voom normalisation methods as selected when downsampling.
+```{r}
+
+tcga_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/tcgavoom_up.RDS')
+tcga_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/tcgavoom_down.RDS')
+
+merge_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/mergedvoom_up.RDS')
+merge_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/mergedvoom_down.RDS')
+
+gtex_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/gtexvoom_up.RDS')
+gtex_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/gtexvoom_down.RDS')
+
+colnames(tcga_up)='GeneName'
+colnames(tcga_down)='GeneName'
+colnames(merge_up)='GeneName'
+colnames(merge_down)='GeneName'
+colnames(gtex_up)='GeneName'
+colnames(gtex_down)='GeneName'
+
+voom.venn.up =  draw.triple.venn(
+
+	area1 = nrow(tcga_up), 
+	area2 = nrow(merge_up), 
+	area3 = nrow(gtex_up),
+	n12 = length(intersect(tcga_up$GeneName, merge_up$GeneName)),
+	n23 = length(intersect(tcga_up$GeneName, gtex_up$GeneName)),
+	n13 = length(intersect(merge_up$GeneName, gtex_up$GeneName)),
+	n123 = length(intersect(intersect(tcga_up$GeneName, merge_up$GeneName), gtex_up$GeneName)),
+	fill = c("blue", "red", "green"),
+	category = c('TCGA', 'Merged', 'GTEx')
+
+)
+
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/upregulatd_venn.pdf')
+  grid.draw(voom.venn.up)
+dev.off()
+
+
+voom.venn.down =  draw.triple.venn(
+
+	area1 = nrow(tcga_down), 
+	area2 = nrow(merge_down), 
+	area3 = nrow(gtex_down),
+	n12 = length(intersect(tcga_down$GeneName, merge_down$GeneName)),
+	n23 = length(intersect(tcga_down$GeneName, gtex_down$GeneName)),
+	n13 = length(intersect(merge_down$GeneName, gtex_down$GeneName)),
+	n123 = length(intersect(intersect(tcga_down$GeneName, merge_down$GeneName), gtex_down$GeneName)),
+	fill = c("blue", "red", "green"),
+	category = c('TCGA', 'Merged', 'GTEx')
+
+)
+
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/downregulatd_venn.pdf')
+  grid.draw(voom.venn.down)
+dev.off()
+
+save.image(file = '~/Desktop/part2_project/Liver_Cancer/updown.Rdata')
+```
+
+
+
+## Python downsampling code
+#USing Voom method and downsampled counts.
+
+#25% Downsample
+
+#Load in original gtex matrix and downsample by 25%
+```{r}
+gtex=readRDS('GTEX.rds')
+
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+gtex=as.matrix(gtex)
+gtex25=downsampleMatrix(gtex, 0.75)
+```
+
+#Load in tcgarawcounts and merge the two
+```{r}
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+
+common_ids = intersect(rownames(gtex25),rownames(tcgarawcounts))
+
+gtex25  = gtex25[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
+```
+
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+```{r}
+mergedcounts=cbind(gtex25, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex25)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+#Set-Up DGE Object
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+dge$samples$batch=batch
+
+cpm=cpm(dge)
+lcpm=cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+quartz()
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - Merged (Voom)', Rowv = F, RowSideColors = cond_colours[conds])
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+```
+  
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds+batch)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend - Voom')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds+batch)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+```{r}
+#PCA Plot
+voompca = prcomp(t(v$E))
+
+voompca.df = voompca$x[, c(1,2,3)]
+
+percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
+percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+
+voompca.df = data.frame(voompca.df, Condition = dge$samples$group, Batch = dge$samples$batch)
+
+quartz()
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+#Tsne
+voomtsne = Rtsne(t(cpm), perplexity = 30)
+voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group, Batch=dge$samples$batch)
+
+quartz()
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-30,25)+
+  ylim(-30,25)
+
+```
+
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+quartz()
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+  
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = batch_colours[batch])
+
+#Comparing distribution between TCGA and GTEX normals
+quartz()
+par(mfrow=c(2,2))
+qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
+qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
+qqnorm(log2(dge$counts+1)[,595], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+
+```
+
+```{r}
+hits=(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+up=hits[hits$logFC>0,]
+up=rownames(up)
+up=as.data.frame(gene_names[up,]$GeneName)
+down=hits[hits$logFC<0,]
+down=rownames(down)
+down=as.data.frame(gene_names[down,]$GeneName)
+
+saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/down25voom_down.RDS")
+saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/down25voom_up.RDS")
+
+VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
+
+```
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/down_25.RData")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+#33% Downsample
+
+#Load in original gtex matrix and downsample by 33%
+```{r}
+gtex=readRDS('GTEX.rds')
+
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+gtex=as.matrix(gtex)
+gtex33=downsampleMatrix(gtex, 0.67)
+```
+
+#Load in tcgarawcounts and merge the two
+```{r}
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+
+common_ids = intersect(rownames(gtex33),rownames(tcgarawcounts))
+
+gtex33  = gtex33[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
+```
+
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+```{r}
+mergedcounts=cbind(gtex33, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex33)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+#Set-Up DGE Object
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+dge$samples$batch=batch
+
+cpm=cpm(dge)
+lcpm=cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+quartz()
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - Merged (Voom)', Rowv = F, RowSideColors = cond_colours[conds])
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+```
+  
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds+batch)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend - Voom')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds+batch)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+```{r}
+#PCA Plot
+voompca = prcomp(t(v$E))
+
+voompca.df = voompca$x[, c(1,2,3)]
+
+percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
+percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+
+voompca.df = data.frame(voompca.df, Condition = dge$samples$group, Batch = dge$samples$batch)
+
+quartz()
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+#Tsne
+voomtsne = Rtsne(t(cpm), perplexity = 30)
+voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group, Batch=dge$samples$batch)
+
+quartz()
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-30,30)+
+  ylim(-25,30)
+
+```
+
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+quartz()
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+  
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = batch_colours[batch])
+
+#Comparing distribution between TCGA and GTEX normals
+quartz()
+par(mfrow=c(2,2))
+qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
+qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
+qqnorm(log2(dge$counts+1)[,595], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+
+```
+
+```{r}
+hits=(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+up=hits[hits$logFC>0,]
+up=rownames(up)
+up=as.data.frame(gene_names[up,]$GeneName)
+down=hits[hits$logFC<0,]
+down=rownames(down)
+down=as.data.frame(gene_names[down,]$GeneName)
+
+saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/down33voom_down.RDS")
+saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/down33voom_up.RDS")
+
+VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
+
+```
+
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/down_33.RData")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+#50% Downsample
+
+#Load in original gtex matrix and downsample by 50%
+```{r}
+gtex=readRDS('GTEX.rds')
+
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+gtex=as.matrix(gtex)
+gtex50=downsampleMatrix(gtex, 0.5)
+```
+
+#Load in tcgarawcounts and merge the two
+```{r}
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+
+common_ids = intersect(rownames(gtex50),rownames(tcgarawcounts))
+
+gtex50  = gtex50[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
+```
+
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+```{r}
+mergedcounts=cbind(gtex50, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex50)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+
+#Set-Up DGE Object
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+dge$samples$batch=batch
+
+cpm=cpm(dge)
+lcpm=cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+quartz()
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - Merged (Voom)', Rowv = F, RowSideColors = cond_colours[conds])
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data - Voom",ylab="Log-cpm", cex.axis = 0.5)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+```
+  
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds+batch)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend - Voom')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds+batch)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+```{r}
+#PCA Plot
+voompca = prcomp(t(v$E))
+
+voompca.df = voompca$x[, c(1,2,3)]
+
+percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
+percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+
+voompca.df = data.frame(voompca.df, Condition = dge$samples$group, Batch = dge$samples$batch)
+
+quartz()
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Merged Data-Voom)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+#Tsne
+voomtsne = Rtsne(t(cpm), perplexity = 30)
+voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group, Batch=dge$samples$batch)
+
+quartz()
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Merged Data-Voom)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-20,25)+
+  ylim(-30,25)
+
+```
+
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+quartz()
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Voom)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+  
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', Colv=FALSE, col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour', ColSideColors = batch_colours[batch])
+
+#Comparing distribution between TCGA and GTEX normals
+quartz()
+par(mfrow=c(2,2))
+qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
+qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
+qqnorm(log2(dge$counts+1)[,595], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+
+```
+
+```{r}
+hits=(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+up=hits[hits$logFC>0,]
+up=rownames(up)
+up=as.data.frame(gene_names[up,]$GeneName)
+down=hits[hits$logFC<0,]
+down=rownames(down)
+down=as.data.frame(gene_names[down,]$GeneName)
+
+saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/down50voom_down.RDS")
+saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/down50voom_up.RDS")
+
+VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
+
+```
+
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/down_50.RData")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+#50% Downsample
+
+#Load in original gtex matrix and downsample by 50%
+```{r}
+gtex=readRDS('GTEX.rds')
+
+gtex_samples=read.table('gtex_simple_samples.txt',row.names=1,sep="\t",header=F)
+colnames(gtex_samples)=c('Tissue_Type', 'Description')
+
+#Liver samples only - '-' substituted for '.' to match initial GTEX counts data
+liver_ids = rownames(gtex_samples)[gtex_samples$Tissue_Type == "Liver"]
+liver_ids = gsub("-",".",liver_ids)
+
+gtex = gtex[,intersect(liver_ids,colnames(gtex))]
+
+rownames(gtex)=gsub(".\\d+$","",rownames(gtex),perl=T)
+
+gtex=as.matrix(gtex)
+gtex75=downsampleMatrix(gtex, 0.25)
+```
+
+#Load in tcgarawcounts and merge the two
+```{r}
+tcgarawcounts=readRDS('~/Desktop/part2_project/Liver_Cancer/tcgarawcounts.RDS')
+
+common_ids = intersect(rownames(gtex75),rownames(tcgarawcounts))
+
+gtex75  = gtex75[common_ids, ]
+
+rawcounts = tcgarawcounts[common_ids, ] 
+
+p_threshold=0.01
+lfc_threshold=1.5
+max_display_hits=250
+```
+
+#MERGE GTEX Normals & TCGA Primary Tumour Matrices
+```{r}
+mergedcounts=cbind(gtex75, rawcounts, deparse.level=1)
+mergedcounts=mergedcounts[rowSums(mergedcounts)>=3,]
+
+#Labelling columns by Sample Type
+colnames(mergedcounts)[1:ncol(gtex75)]='Normal'
+
+#Identify Conditions and Batches (GTEX vs. TCGA)
+conds=as.factor(colnames(mergedcounts))
+cond_colours = brewer.pal(length(unique(conds)), 'Set1')
+names(cond_colours)=unique(conds)
+
+batch = as.factor(c(rep("GTEX",ncol(gtex)),rep("TCGA",ncol(rawcounts))))
+batch_colours=c('greenyellow', 'dark green')
+names(batch_colours)=unique(batch)
+
+hmcol = colorRampPalette(brewer.pal(9, 'GnBu'))(100)
+```
+
+```{r}
+# Load in Gene Names and match up with rownames in ddsHTSeq
+gene_names = read.table("~/Desktop/part2_project/Liver_Cancer/TCGA_Counts_mRNA_genelevel/gene_names.txt",row.names=1,header = F)
+colnames(gene_names)=c("GeneName","Source","BioType")
+```
+
+#Set-Up DGE Object
+```{r}
+
+dge=DGEList(counts=mergedcounts)
+
+dge$samples$group=conds
+dge$samples$batch=batch
+
+cpm=cpm(dge)
+lcpm=cpm(dge, log=T)
+
+keep.exprs=rowSums(cpm>1)>=3
+dge=dge[keep.exprs,,keep.lib.sizes=F]
+dim(dge)
+
+dge=calcNormFactors(dge, method='TMM')
+dge$samples$norm.factors
+
+quartz()
+
+heatmap.2(cor(dge$counts),trace="none",labRow = conds, cexRow = 0.6, labCol =  dge$samples$group, cexCol = 0.6, col=hmcol, main = 'Heatmap of Correlation of the dge Counts - Merged (Voom)', Rowv = F, RowSideColors = cond_colours[conds])
+
+quartz()
+par(mfrow=c(2,1))
+
+barplot(apply(dge$counts,2,sum), las=2, main='Pre Normalised Data (Downsampled 75%)', ylab='Log-cpm', cex.axis = 0.5, col = cond_colours[conds])
+
+barplot(apply(dge$counts,2,sum)*dge$sample$norm.factors, las=2, col=cond_colours[conds], main="Normalised Data (Downsampled 75%)",ylab="Log-cpm", cex.axis = 0.5)
+
+quartz()
+plotMDS(dge, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+```
+  
+
+#Design including conditions and batch effect
+```{r}
+#Design
+design=model.matrix(~0+conds+batch)
+contr.matrix=makeContrasts(condsPrimary_Tumor-condsNormal, levels = colnames(design))
+
+quartz()
+v=voom(dge, design, plot = T)
+
+vfit=lmFit(v, design)
+vfit=contrasts.fit(vfit, contrasts = contr.matrix)
+efit=eBayes(vfit)
+
+
+#SA Plot
+quartz()
+plotSA(efit, main='Mean-Variance Trend - Voom')
+
+
+#MDS Plot
+quartz()
+plotMDS(v, pch = 19, col= cond_colours[conds], main='Multi Dimensional Scaling (MDS) Plot - Voom (conds+batch)')
+legend('bottomright', legend=levels(conds), col=cond_colours[unique(conds)], pch = 20)
+
+
+#Summary of findings from comparisons
+summary(decideTests(efit))
+
+#Further Analysis
+tfit = treat(efit, lfc=lfc_threshold)
+dt = decideTests(tfit)
+summary(dt)
+```
+
+```{r}
+#PCA Plot
+voompca = prcomp(t(v$E))
+
+voompca.df = voompca$x[, c(1,2,3)]
+
+percentages = round(voompca$sdev^2 / sum(voompca$sdev^2) * 100)[1:3]
+percentages = paste(paste0(colnames(voompca.df), ":"),  paste0(as.character(percentages), "%"), "variance", sep=" ")
+
+voompca.df = data.frame(voompca.df, Condition = dge$samples$group, Batch = dge$samples$batch)
+
+quartz()
+ggplot(voompca.df, aes(x=PC1,y=PC2, colour = Condition, shape = Batch))+
+	geom_point(size = 4)+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  ggtitle("PCA1 vs PCA2 (Downsampled 75%)")+
+  stat_ellipse(aes(colour=Condition),type = "t")+
+  xlab(percentages[1]) + 
+	ylab(percentages[2]) +
+  xlim(-220, 220) +
+  ylim(-220, 210)
+
+#Tsne
+voomtsne = Rtsne(t(cpm), perplexity = 30)
+voomtsne.df=data.frame(tsne.1=voomtsne$Y[,1], tsne.2=voomtsne$Y[,2], Type=dge$samples$group, Batch=dge$samples$batch)
+
+quartz()
+ggplot(data = voomtsne.df, aes(tsne.1,  tsne.2, colour=Type, shape=Batch))+
+  geom_point(size=4)+
+  ggtitle("T-sne (Downsampled 75%)")+
+  scale_color_manual(values=unique(cond_colours[conds]))+
+  stat_ellipse(aes(colour=Type),type = "t")+
+  xlim(-25,25)+
+  ylim(-20,30)
+
+```
+
+```{r}
+#Extract top significant hits by adjusted p value and log fold change
+hit_table1=topTable(efit,coef=1,number=10000000000000)
+
+hit_table1=hit_table1[order(abs(hit_table1$logFC),decreasing = T),]
+
+hitlist1=rownames(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+quartz()
+plot(hit_table1$logFC,-log10(hit_table1$adj.P.Val),pch=19,cex=0.4,col="darkblue", main='Volcano Plot - Normal vs Primary Tumour (Downsampled 75%)')
+  points(hit_table1[hitlist1[1:250],"logFC"],-log10(hit_table1[hitlist1[1:250],"adj.P.Val"]),cex=0.4,col="cyan")
+  text(hit_table1[1:100,]$logFC,-log10(hit_table1[1:100,]$adj.P.Val), labels= gene_names[hitlist1[1:100],]$GeneName, pos=3, cex=0.4)
+  abline(h=-log10(p_threshold), lty=3, col='red')
+  abline(v=-lfc_threshold, lty=3, col='red')
+  abline(v=lfc_threshold, lty=3, col='red')
+  
+
+# Heatmap the top 100 from above using the log 2 of the voom normalised counts.
+quartz()
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 75%)', ColSideColors = cond_colours[conds])
+
+heatmap.2(lcpm[hitlist1[1:100],], trace = 'none', col=hmcol, main = 'Heatmap of lcpm for Primary Tumour (Downsampled 75%)', ColSideColors = batch_colours[batch])
+
+#Comparing distribution between TCGA and GTEX normals
+quartz()
+par(mfrow=c(2,2))
+qqnorm(log2(dge$counts+1)[,1], main = 'Normal Q-Q Plot (GTEX Sample 1)')
+qqnorm(log2(dge$counts+1)[,2], main = 'Normal Q-Q Plot (GTEX Sample 2)')
+qqnorm(log2(dge$counts+1)[,595], main = 'Normal Q-Q Plot (TCGA Sample 1)')
+qqnorm(log2(dge$counts+1)[,596], main = 'Normal Q-Q Plot (TCGA Sample 2)')
+
+```
+
+```{r}
+hits=(hit_table1[((abs(hit_table1$logFC) >= lfc_threshold) & (hit_table1$adj.P.Val<=p_threshold)),])
+
+up=hits[hits$logFC>0,]
+up=rownames(up)
+up=as.data.frame(gene_names[up,]$GeneName)
+down=hits[hits$logFC<0,]
+down=rownames(down)
+down=as.data.frame(gene_names[down,]$GeneName)
+
+saveRDS(down, file = "~/Desktop/part2_project/Liver_Cancer/down75voom_down.RDS")
+saveRDS(up, file = "~/Desktop/part2_project/Liver_Cancer/down75voom_up.RDS")
+
+VOOMprimhits=as.data.frame(gene_names[hitlist1[1:250],]$GeneName)
+
+```
+
+
+```{r}
+save.image("~/Desktop/part2_project/Liver_Cancer/down_75.RData")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##Venn Diagrams with downsampled hits
+
+```{r}
+tcga_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/tcgavoom_up.RDS')
+tcga_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/tcgavoom_down.RDS')
+
+merge_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/mergedvoom_up.RDS')
+merge_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/mergedvoom_down.RDS')
+
+gtex_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/gtexvoom_up.RDS')
+gtex_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/gtexvoom_down.RDS')
+
+down25_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down25voom_up.RDS')
+down25_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down25voom_down.RDS')
+
+down33_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down33voom_up.RDS')
+down33_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down33voom_down.RDS')
+
+down50_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down50voom_up.RDS')
+down50_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down50voom_down.RDS')
+
+down75_up=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down75voom_up.RDS')
+down75_down=readRDS(file = '~/Desktop/part2_project/Liver_Cancer/updown/down75voom_down.RDS')
+
+colnames(tcga_up)='GeneName'
+colnames(tcga_down)='GeneName'
+colnames(merge_up)='GeneName'
+colnames(merge_down)='GeneName'
+colnames(gtex_up)='GeneName'
+colnames(gtex_down)='GeneName'
+
+colnames(down25_up)='GeneName'
+colnames(down25_down)='GeneName'
+colnames(down33_up)='GeneName'
+colnames(down33_down)='GeneName'
+colnames(down50_up)='GeneName'
+colnames(down50_down)='GeneName'
+colnames(down75_up)='GeneName'
+colnames(down75_down)='GeneName'
+
+
+dev.off()
+
+save.image(file = '~/Desktop/part2_project/Liver_Cancer/updown.Rdata')
+
+```
+
+
+```{r}
+
+gtex_hittable=readRDS(file ='~/Desktop/part2_project/Liver_Cancer/GTEXhittable.RDS' )
+tcga_hittable=readRDS(file='~/Desktop/part2_project/Liver_Cancer/TCGAhittable.RDS')
+
+common_ids = intersect(rownames(gtex_hittable),rownames(tcga_hittable))
+
+gtex_hittable=gtex_hittable[common_ids,]
+tcga_hittable=tcga_hittable[common_ids,]
+
+pdf(file='~/Desktop/part2_project/Liver_Cancer/plots/butterfly_plot.pdf')
+
+plot(tcga_hittable$logFC,gtex_hittable$logFC, title(main = 'Butterfly Plot', xlab = 'Log2 Fold Change: TCGA Normals vs. Primary Tumour', ylab = 'Log2 Fold Change: GTEx Normals vs. Primary Tumour'), xlim=c(-10,10))
+  abline(h=0)
+  abline(v=0)
+  abline(a=0,b=1, lty=1, col='red')
+
+  dev.off()
+```
+
+
